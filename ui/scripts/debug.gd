@@ -13,10 +13,10 @@ func _ready():
 	add_debug_property("FPS",fps)
 	
 func _process(delta):
+	if visible:
+		fps = "%.2f" % (1.0/delta)
 	
-	fps = "%.2f" % (1.0/delta)
-	
-	property.text = property.name + ": " + fps
+		property.text = property.name + ": " + fps
 	
 func _input(event):
 	#open debug

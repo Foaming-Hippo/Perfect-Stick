@@ -2,11 +2,9 @@
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_l4fqd"]
 bg_color = Color(0.22, 0.22, 0.22, 0.482353)
-border_width_left = 2
-border_width_top = 2
-border_width_right = 2
-border_width_bottom = 2
-border_color = Color(0.0999849, 0.0999864, 0.099986, 1)
+border_width_left = 4
+border_width_top = 4
+border_color = Color(0.973535, 0.973535, 0.973535, 1)
 
 [resource]
 MarginContainer/constants/margin_bottom = 10
