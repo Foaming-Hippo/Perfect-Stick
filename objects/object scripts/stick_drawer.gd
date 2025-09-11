@@ -1,3 +1,5 @@
+# this code was written by Chat-GPT
+
 extends Node2D
 
 @export var segment_count: int = 6
