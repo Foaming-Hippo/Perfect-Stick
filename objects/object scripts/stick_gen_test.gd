@@ -11,3 +11,5 @@ func _ready():
 	var item_data_json = JSON.parse_string(itemdata_file.get_as_text())
 	print(item_data_json)
 	itemdata_file.close()
+	
+	
