@@ -1,6 +1,12 @@
 # this code was written by Chat-GPT
 
+# press C to generate stick
+# press tab to open stick menu
+
 extends Node2D
+
+@onready var stick_container = $"." # Node2D where the stick will appear
+
 
 @export var segment_count: int = 6
 @export var segment_min_length: float = 20

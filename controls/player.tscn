@@ -3,7 +3,7 @@
 [ext_resource type="Script" uid="uid://drpj1xh3o2et6" path="res://controls/scripts/player_controls.gd" id="1_b10bb"]
 [ext_resource type="Theme" uid="uid://2l4uv4cw4gub" path="res://ui/themes/debug.tres" id="2_xkr20"]
 [ext_resource type="Script" uid="uid://bxjqem00efvn3" path="res://ui/scripts/debug.gd" id="3_yjw6m"]
-[ext_resource type="Script" uid="uid://ctudy6aye7xhf" path="res://objects/object scripts/stick_drawer.gd" id="4_2eww7"]
+[ext_resource type="PackedScene" uid="uid://b5oq2qkaupmh0" path="res://Menus/StickMenu.tscn" id="4_2eww7"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_sh265"]
 radius = 0.25
@@ -225,9 +225,6 @@ layout_mode = 2
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="Node" type="Node" parent="."]
-
-[node name="Stick_Drawer" type="Node2D" parent="Node"]
-script = ExtResource("4_2eww7")
+[node name="StickMenu" parent="." instance=ExtResource("4_2eww7")]
 
 [connection signal="animation_started" from="AnimationPlayer" to="." method="_on_animation_player_animation_started"]
