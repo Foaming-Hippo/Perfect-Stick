@@ -1,9 +1,8 @@
-[gd_scene load_steps=11 format=3 uid="uid://dqur47ysrds8v"]
+[gd_scene load_steps=10 format=3 uid="uid://dqur47ysrds8v"]
 
 [ext_resource type="Script" uid="uid://drpj1xh3o2et6" path="res://controls/scripts/player_controls.gd" id="1_b10bb"]
 [ext_resource type="Theme" uid="uid://2l4uv4cw4gub" path="res://ui/themes/debug.tres" id="2_xkr20"]
 [ext_resource type="Script" uid="uid://bxjqem00efvn3" path="res://ui/scripts/debug.gd" id="3_yjw6m"]
-[ext_resource type="PackedScene" uid="uid://b5oq2qkaupmh0" path="res://Menus/StickMenu.tscn" id="4_2eww7"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_sh265"]
 radius = 0.25
@@ -224,7 +223,5 @@ layout_mode = 2
 [node name="VBoxContainer" type="VBoxContainer" parent="UI/Debug/MarginContainer"]
 unique_name_in_owner = true
 layout_mode = 2
-
-[node name="StickMenu" parent="." instance=ExtResource("4_2eww7")]
 
 [connection signal="animation_started" from="AnimationPlayer" to="." method="_on_animation_player_animation_started"]

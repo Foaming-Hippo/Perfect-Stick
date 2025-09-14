@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3 uid="uid://c0s52rxggmxlr"]
+[gd_scene load_steps=2 format=3 uid="uid://rrqc16tie0wb"]
 
 [ext_resource type="Script" uid="uid://ctudy6aye7xhf" path="res://objects/object scripts/stick_drawer.gd" id="1_j2exl"]
 

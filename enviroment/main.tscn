@@ -1,7 +1,8 @@
-[gd_scene load_steps=10 format=3 uid="uid://ddv0uay3yees8"]
+[gd_scene load_steps=11 format=3 uid="uid://ddv0uay3yees8"]
 
 [ext_resource type="PackedScene" uid="uid://dqur47ysrds8v" path="res://controls/player.tscn" id="1_bi3o0"]
 [ext_resource type="Texture2D" uid="uid://cbmo0und63y3r" path="res://assets/walltexture.jpgf8e1ee5c-aa56-40f9-986a-a583fbad830bLarge.jpg" id="1_e3ut3"]
+[ext_resource type="Script" uid="uid://dvo1lfdhisdvp" path="res://objects/object scripts/stick_3d.gd" id="1_le8cr"]
 [ext_resource type="PackedScene" uid="uid://dngn2hauowag6" path="res://enviroment/world_environment.tscn" id="2_e3ut3"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_le8cr"]
@@ -23,8 +24,16 @@ material = SubResource("StandardMaterial3D_e3ut3")
 
 [node name="Main" type="Node3D"]
 
+[node name="stick_gen_3D" type="Node3D" parent="."]
+script = ExtResource("1_le8cr")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="stick_gen_3D"]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="stick_gen_3D"]
+
 [node name="floor_1" type="MeshInstance3D" parent="."]
 transform = Transform3D(50, 0, 0, 0, 1, 0, 0, 0, 50, 0, 0, 0)
+visible = false
 mesh = SubResource("BoxMesh_ig7tw")
 
 [node name="StaticBody3D" type="StaticBody3D" parent="floor_1"]

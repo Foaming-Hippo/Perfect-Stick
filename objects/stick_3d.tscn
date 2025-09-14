@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://dmv0nfwou2uwu"]
+
+[ext_resource type="Script" uid="uid://dvo1lfdhisdvp" path="res://objects/object scripts/stick_3d.gd" id="1_lt403"]
+
+[node name="Node3D" type="Node3D"]
+script = ExtResource("1_lt403")
