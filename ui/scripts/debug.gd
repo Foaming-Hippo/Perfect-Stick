@@ -21,6 +21,10 @@ func _input(event):
 	#open debug
 	if event.is_action_pressed("debug"):
 		visible = !visible
+	if visible:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	else:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 func add_debug_property(title: String,value):
 	property = Label.new()

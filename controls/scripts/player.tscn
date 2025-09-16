@@ -1,6 +1,8 @@
-[gd_scene load_steps=8 format=3 uid="uid://dqur47ysrds8v"]
+[gd_scene load_steps=10 format=3 uid="uid://bf6rpe2qblh02"]
 
 [ext_resource type="Script" uid="uid://drpj1xh3o2et6" path="res://controls/scripts/player_controls.gd" id="1_b10bb"]
+[ext_resource type="Theme" uid="uid://2l4uv4cw4gub" path="res://ui/themes/debug.tres" id="2_xkr20"]
+[ext_resource type="Script" uid="uid://bxjqem00efvn3" path="res://ui/scripts/debug.gd" id="3_yjw6m"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_sh265"]
 radius = 0.25
@@ -170,6 +172,7 @@ _data = {
 
 [node name="player" type="CharacterBody3D" node_paths=PackedStringArray("CAMERA_CONTROL", "ANI_PLAY", "CROUCH_SHAPECAST")]
 script = ExtResource("1_b10bb")
+TOGGLE_CROUCH = false
 CAMERA_CONTROL = NodePath("CollisionShape3D/Camera_Control/Camera3D")
 ANI_PLAY = NodePath("AnimationPlayer")
 CROUCH_SHAPECAST = NodePath("ShapeCast3D")
@@ -184,8 +187,6 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
 [node name="Camera3D" type="Camera3D" parent="CollisionShape3D/Camera_Control"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.25, 0)
 
-[node name="HandSocket" type="Node3D" parent="CollisionShape3D/Camera_Control/Camera3D"]
-
 [node name="place_holder_mesh" type="MeshInstance3D" parent="CollisionShape3D"]
 mesh = SubResource("CapsuleMesh_4flbx")
 
@@ -199,5 +200,28 @@ transform = Transform3D(0.5, 0, 0, 0, -2.18557e-08, 0.5, 0, -0.5, -2.18557e-08, 
 shape = SubResource("SphereShape3D_b10bb")
 target_position = Vector3(0, 0.5, 0)
 debug_shape_custom_color = Color(0.82, 0, 0.0136665, 1)
+
+[node name="UI" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 0
+offset_right = 10.0
+offset_bottom = 10.0
+
+[node name="Debug" type="PanelContainer" parent="UI"]
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = 210.0
+offset_bottom = 50.0
+theme = ExtResource("2_xkr20")
+script = ExtResource("3_yjw6m")
+
+[node name="MarginContainer" type="MarginContainer" parent="UI/Debug"]
+layout_mode = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="UI/Debug/MarginContainer"]
+unique_name_in_owner = true
+layout_mode = 2
 
 [connection signal="animation_started" from="AnimationPlayer" to="." method="_on_animation_player_animation_started"]

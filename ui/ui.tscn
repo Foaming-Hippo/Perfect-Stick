@@ -1,0 +1,34 @@
+[gd_scene load_steps=4 format=3 uid="uid://bgfjcc2hkle34"]
+
+[ext_resource type="Theme" uid="uid://2l4uv4cw4gub" path="res://ui/themes/debug.tres" id="1_ks8t7"]
+[ext_resource type="Script" uid="uid://bxjqem00efvn3" path="res://ui/scripts/debug.gd" id="2_wl5ax"]
+[ext_resource type="Script" uid="uid://dbogqo3e8fybi" path="res://ui/scripts/crosshair.gd" id="4_vkava"]
+
+[node name="UI" type="CanvasLayer"]
+
+[node name="Debug" type="PanelContainer" parent="."]
+custom_minimum_size = Vector2(200, 0)
+offset_left = 10.0
+offset_top = 10.0
+offset_right = 210.0
+offset_bottom = 50.0
+theme = ExtResource("1_ks8t7")
+script = ExtResource("2_wl5ax")
+
+[node name="MarginContainer" type="MarginContainer" parent="Debug"]
+layout_mode = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="Debug/MarginContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Crosshair" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 1
+script = ExtResource("4_vkava")
+color = Color(1, 1, 1, 0.498039)
