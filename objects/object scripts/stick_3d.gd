@@ -49,36 +49,61 @@ func _input(event: InputEvent) -> void:
 # ───────────────
 func pickup_nearest_stick() -> void:
 	var cam: Camera3D = get_viewport().get_camera_3d()
-	if cam == null: return
+	if cam == null: 
+		return
 
 	var screen_center: Vector2 = get_viewport().get_visible_rect().size / 2
 	var from: Vector3 = cam.project_ray_origin(screen_center)
-	var to: Vector3 = from + cam.project_ray_normal(screen_center) * 5.0
+	var dir: Vector3 = cam.project_ray_normal(screen_center)
 
-	var query := PhysicsRayQueryParameters3D.create(from, to, 1 << 3)
-	var result := get_world_3d().direct_space_state.intersect_ray(query)
-	if result.is_empty(): return
+	# "Fat ray" = cast multiple rays with small offsets around center
+	var ray_offsets := [
+		Vector2.ZERO,
+		Vector2(4, 0), Vector2(-4, 0),
+		Vector2(0, 4), Vector2(0, -4)
+	]
 
-	var body: PhysicsBody3D = result["collider"]
-	if body is RigidBody3D:
-		_clear_highlight()
-		held_stick = body as RigidBody3D
-		held_stick.freeze_mode = RigidBody3D.FREEZE_MODE_STATIC
-		held_stick.freeze = true
-		held_stick.gravity_scale = 0
-		held_stick.linear_velocity = Vector3.ZERO
-		held_stick.angular_velocity = Vector3.ZERO
+	var closest: RigidBody3D = null
+	var closest_dist := INF
 
-		if held_stick.get_parent():
-			held_stick.get_parent().remove_child(held_stick)
-		hand.add_child(held_stick)
+	for offset in ray_offsets:
+		var ray_from := cam.project_ray_origin(screen_center + offset)
+		var ray_to := ray_from + cam.project_ray_normal(screen_center + offset) * 5.0
 
-		var hold_offset := Transform3D(
-			Basis().rotated(Vector3.RIGHT, deg_to_rad(-30))
-				  .rotated(Vector3.UP, deg_to_rad(90)),
-			Vector3(0.3, -0.3, -0.7)
-		)
-		held_stick.transform = hold_offset
+		var query := PhysicsRayQueryParameters3D.create(ray_from, ray_to, 1 << 3)
+		var result := get_world_3d().direct_space_state.intersect_ray(query)
+
+		if not result.is_empty():
+			var body: PhysicsBody3D = result["collider"]
+			if body is RigidBody3D:
+				var dist := cam.global_position.distance_to(body.global_position)
+				if dist < closest_dist:
+					closest = body
+					closest_dist = dist
+
+	if closest == null: 
+		return
+
+	# --- pickup handling ---
+	_clear_highlight()
+	held_stick = closest
+	held_stick.freeze_mode = RigidBody3D.FREEZE_MODE_STATIC
+	held_stick.freeze = true
+	held_stick.gravity_scale = 0
+	held_stick.linear_velocity = Vector3.ZERO
+	held_stick.angular_velocity = Vector3.ZERO
+
+	if held_stick.get_parent():
+		held_stick.get_parent().remove_child(held_stick)
+	hand.add_child(held_stick)
+
+	var hold_offset := Transform3D(
+		Basis().rotated(Vector3.RIGHT, deg_to_rad(-30))
+			  .rotated(Vector3.UP, deg_to_rad(90)),
+		Vector3(0.3, -0.3, -0.7)
+	)
+	held_stick.transform = hold_offset
+
 
 
 func drop_stick() -> void:
@@ -226,7 +251,7 @@ func _make_stick_segment(start_pos: Vector3, start_basis: Basis, scale: float, p
 	if segs <= 0: return
 
 	var pos := start_pos
-	var basis := start_basis
+	var seg_basis := start_basis  # ✅ renamed to avoid shadowing Node3D.basis
 
 	for i in range(segs):
 		var length: float = randf_range(segment_min_length, segment_max_length) * scale
@@ -246,8 +271,8 @@ func _make_stick_segment(start_pos: Vector3, start_basis: Basis, scale: float, p
 		mi.material_override = mat
 
 		var local_offset := Vector3(0, length * 0.5, 0)
-		var world_offset := basis * local_offset
-		mi.transform = Transform3D(basis, pos + world_offset)
+		var world_offset := seg_basis * local_offset
+		mi.transform = Transform3D(seg_basis, pos + world_offset)
 		parent_node.add_child(mi)
 
 		var outline := MeshInstance3D.new()
@@ -272,13 +297,13 @@ func _make_stick_segment(start_pos: Vector3, start_basis: Basis, scale: float, p
 		coll.transform = mi.transform
 		parent_node.add_child(coll)
 
-		pos += (basis * Vector3.UP) * length
+		pos += (seg_basis * Vector3.UP) * length
 
 		var bend := Basis()
 		bend = bend.rotated(Vector3.RIGHT, randf_range(-angle_variance, angle_variance))
 		bend = bend.rotated(Vector3.FORWARD, randf_range(-angle_variance, angle_variance))
-		basis = basis * bend
+		seg_basis = seg_basis * bend
 
 		if randf() < branch_chance and scale > 0.3:
-			var branch_basis := basis.rotated(Vector3.UP, randf_range(-1.0, 1.0))
+			var branch_basis := seg_basis.rotated(Vector3.UP, randf_range(-1.0, 1.0))
 			_make_stick_segment(pos, branch_basis, scale * branch_scale, thickness, parent_node)
