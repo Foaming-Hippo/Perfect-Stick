@@ -14,6 +14,15 @@ extends Node3D
 @export var grab_max_distance: float = 6.0
 @export var grab_stiffness: float = 10.0
 
+# 🔹 Fat ray inspector settings
+@export var ray_spread: int = 6
+@export var ray_length: float = 5.0
+@export var ray_count: int = 8
+
+# 🔹 Flick throw settings
+@export var flick_sensitivity: float = 0.05  # multiplier for flick velocity
+@export var flick_max_boost: float = 20.0    # clamp maximum flick force
+
 @onready var hand: Node3D = get_node("../player/CollisionShape3D/Camera_Control/Camera3D/HandSocket")
 
 var held_stick: RigidBody3D = null
@@ -21,6 +30,9 @@ var grabbed_stick: RigidBody3D = null
 var highlighted_stick: RigidBody3D = null
 var grabbed_distance: float = 2.0
 var grabbed_offset: Vector3 = Vector3.ZERO
+
+# For flick detection
+var last_mouse_delta: Vector2 = Vector2.ZERO
 
 
 func _ready() -> void:
@@ -43,6 +55,76 @@ func _input(event: InputEvent) -> void:
 	elif event.is_action_released("mouse_left"):
 		release_grabbed_stick()
 
+	# Capture flick mouse movement
+	if event is InputEventMouseMotion:
+		last_mouse_delta = event.relative
+
+
+# ───────────────
+# Sound Handling
+# ───────────────
+var light_throw_sounds: Array[AudioStream] = [
+	preload("res://assets/sounds/lego-yoda-death-sound-made-with-Voicemod.mp3")
+]
+var medium_throw_sounds: Array[AudioStream] = [
+	preload("res://assets/sounds/again-fetty-wap-jbl-made-with-Voicemod.wav")
+]
+
+var heavy_throw_sounds: Array[AudioStream] = [
+	preload("res://assets/sounds/kirby-falling-meme-scream-made-with-Voicemod.mp3"),
+	preload("res://assets/sounds/streamer-scream-meme-made-with-Voicemod.mp3"),
+	preload("res://assets/sounds/jbl long.mp3"),
+	preload("res://assets/sounds/femur-breaker-(scream-only)-made-with-Voicemod.mp3")
+]
+var super_throw: Array[AudioStream] = [
+	preload("res://assets/sounds/tyler-1-scream-and-disappear-made-with-Voicemod.mp3"),
+	
+]
+
+func play_throw_sound_if_hard(stick: RigidBody3D) -> void:
+	if stick == null: return
+	var speed := stick.linear_velocity.length()
+	var sound: AudioStreamPlayer3D = stick.get_meta("throw_sound")
+	if sound == null: return
+	if speed > 37.0:
+		sound.stream = super_throw[randi() % super_throw.size()]
+		sound.volume_db = 15.0
+	elif speed > 20.0:
+		# Heavy throw
+		sound.stream = heavy_throw_sounds[randi() % heavy_throw_sounds.size()]
+		sound.volume_db = 10.0   # +6dB louder
+	elif speed > 12.0:
+		# Medium throw
+		sound.stream = medium_throw_sounds[randi() % medium_throw_sounds.size()]
+		sound.volume_db = 3.0
+	elif speed > 6.0:
+		# Light throw
+		sound.stream = light_throw_sounds[randi() % light_throw_sounds.size()]
+		sound.volume_db = 0.0
+	else:
+		return  # too soft, no sound
+
+	sound.play()
+		
+
+
+# ───────────────
+# Fat Ray Utility
+# ───────────────
+func _get_ray_offsets() -> Array:
+	var offsets: Array = [Vector2.ZERO]
+	if ray_count >= 4:
+		offsets.append(Vector2(ray_spread, 0))
+		offsets.append(Vector2(-ray_spread, 0))
+		offsets.append(Vector2(0, ray_spread))
+		offsets.append(Vector2(0, -ray_spread))
+	if ray_count >= 8:
+		offsets.append(Vector2(ray_spread, ray_spread))
+		offsets.append(Vector2(-ray_spread, ray_spread))
+		offsets.append(Vector2(ray_spread, -ray_spread))
+		offsets.append(Vector2(-ray_spread, -ray_spread))
+	return offsets
+
 
 # ───────────────
 # Anchored Pickup
@@ -53,22 +135,12 @@ func pickup_nearest_stick() -> void:
 		return
 
 	var screen_center: Vector2 = get_viewport().get_visible_rect().size / 2
-	var from: Vector3 = cam.project_ray_origin(screen_center)
-	var dir: Vector3 = cam.project_ray_normal(screen_center)
-
-	# "Fat ray" = cast multiple rays with small offsets around center
-	var ray_offsets := [
-		Vector2.ZERO,
-		Vector2(4, 0), Vector2(-4, 0),
-		Vector2(0, 4), Vector2(0, -4)
-	]
-
 	var closest: RigidBody3D = null
 	var closest_dist := INF
 
-	for offset in ray_offsets:
+	for offset in _get_ray_offsets():
 		var ray_from := cam.project_ray_origin(screen_center + offset)
-		var ray_to := ray_from + cam.project_ray_normal(screen_center + offset) * 5.0
+		var ray_to := ray_from + cam.project_ray_normal(screen_center + offset) * ray_length
 
 		var query := PhysicsRayQueryParameters3D.create(ray_from, ray_to, 1 << 3)
 		var result := get_world_3d().direct_space_state.intersect_ray(query)
@@ -84,7 +156,6 @@ func pickup_nearest_stick() -> void:
 	if closest == null: 
 		return
 
-	# --- pickup handling ---
 	_clear_highlight()
 	held_stick = closest
 	held_stick.freeze_mode = RigidBody3D.FREEZE_MODE_STATIC
@@ -105,7 +176,6 @@ func pickup_nearest_stick() -> void:
 	held_stick.transform = hold_offset
 
 
-
 func drop_stick() -> void:
 	if held_stick == null: return
 
@@ -123,6 +193,7 @@ func drop_stick() -> void:
 	if player and player.has_method("get_velocity"):
 		held_stick.linear_velocity = player.get_velocity()
 
+	play_throw_sound_if_hard(held_stick)
 	held_stick = null
 
 
@@ -130,29 +201,45 @@ func drop_stick() -> void:
 # Physics Grab
 # ───────────────
 func grab_stick() -> void:
-	if grabbed_stick != null: return
+	if grabbed_stick != null:
+		return
 
 	var cam: Camera3D = get_viewport().get_camera_3d()
-	if cam == null: return
+	if cam == null:
+		return
 
 	var screen_center: Vector2 = get_viewport().get_visible_rect().size / 2
-	var from: Vector3 = cam.project_ray_origin(screen_center)
-	var to: Vector3 = from + cam.project_ray_normal(screen_center) * 5.0
+	var closest: RigidBody3D = null
+	var closest_hit: Dictionary = {}
+	var closest_dist := INF
 
-	var query := PhysicsRayQueryParameters3D.create(from, to, 1 << 3)
-	var result := get_world_3d().direct_space_state.intersect_ray(query)
-	if result.is_empty(): return
+	for offset in _get_ray_offsets():
+		var ray_from := cam.project_ray_origin(screen_center + offset)
+		var ray_to := ray_from + cam.project_ray_normal(screen_center + offset) * ray_length
 
-	var body: PhysicsBody3D = result["collider"]
-	if body is RigidBody3D:
-		_clear_highlight()
-		grabbed_stick = body as RigidBody3D
-		grabbed_stick.freeze = false
-		grabbed_stick.gravity_scale = 1.0
+		var query := PhysicsRayQueryParameters3D.create(ray_from, ray_to, 1 << 3)
+		var result := get_world_3d().direct_space_state.intersect_ray(query)
 
-		var hit_pos: Vector3 = result["position"]
-		grabbed_distance = cam.global_position.distance_to(hit_pos)
-		grabbed_offset = grabbed_stick.global_transform.affine_inverse() * hit_pos
+		if not result.is_empty():
+			var body: PhysicsBody3D = result["collider"]
+			if body is RigidBody3D:
+				var dist := cam.global_position.distance_to(result["position"])
+				if dist < closest_dist:
+					closest = body
+					closest_hit = result
+					closest_dist = dist
+
+	if closest == null:
+		return
+
+	_clear_highlight()
+	grabbed_stick = closest
+	grabbed_stick.freeze = false
+	grabbed_stick.gravity_scale = 1.0
+
+	var hit_pos: Vector3 = closest_hit["position"]
+	grabbed_distance = cam.global_position.distance_to(hit_pos)
+	grabbed_offset = grabbed_stick.global_transform.affine_inverse() * hit_pos
 
 
 func _physics_process(delta: float) -> void:
@@ -174,6 +261,14 @@ func release_grabbed_stick() -> void:
 	var player := get_node("../player")
 	if player and player.has_method("get_velocity"):
 		grabbed_stick.linear_velocity += player.get_velocity()
+
+	# 🔹 Add flick throw force
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	if cam:
+		var flick_force = -cam.global_basis.z * min(last_mouse_delta.length() * flick_sensitivity, flick_max_boost)
+		grabbed_stick.linear_velocity += flick_force
+
+	play_throw_sound_if_hard(grabbed_stick)
 	grabbed_stick = null
 
 
@@ -182,29 +277,35 @@ func release_grabbed_stick() -> void:
 # ───────────────
 func _process(_delta: float) -> void:
 	var cam: Camera3D = get_viewport().get_camera_3d()
-	if cam == null: return
+	if cam == null: 
+		return
 
 	var screen_center: Vector2 = get_viewport().get_visible_rect().size / 2
-	var from: Vector3 = cam.project_ray_origin(screen_center)
-	var to: Vector3 = from + cam.project_ray_normal(screen_center) * 5.0
+	var closest: RigidBody3D = null
+	var closest_dist := INF
 
-	var query := PhysicsRayQueryParameters3D.create(from, to, 1 << 3)
-	var result := get_world_3d().direct_space_state.intersect_ray(query)
+	for offset in _get_ray_offsets():
+		var ray_from := cam.project_ray_origin(screen_center + offset)
+		var ray_to := ray_from + cam.project_ray_normal(screen_center + offset) * ray_length
 
-	if result.is_empty():
+		var query := PhysicsRayQueryParameters3D.create(ray_from, ray_to, 1 << 3)
+		var result := get_world_3d().direct_space_state.intersect_ray(query)
+
+		if not result.is_empty():
+			var body: PhysicsBody3D = result["collider"]
+			if body is RigidBody3D and body != held_stick and body != grabbed_stick:
+				var dist := cam.global_position.distance_to(body.global_position)
+				if dist < closest_dist:
+					closest = body
+					closest_dist = dist
+
+	if closest == null:
 		_clear_highlight()
-		return
-
-	var body: PhysicsBody3D = result["collider"]
-
-	if body == held_stick or body == grabbed_stick:
-		_clear_highlight()
-		return
-
-	if body is RigidBody3D and body != highlighted_stick:
-		_clear_highlight()
-		highlighted_stick = body
-		_set_highlight(highlighted_stick)
+	else:
+		if closest != highlighted_stick:
+			_clear_highlight()
+			highlighted_stick = closest
+			_set_highlight(highlighted_stick)
 
 
 func _set_highlight(stick: RigidBody3D) -> void:
@@ -234,6 +335,8 @@ func generate_stick() -> void:
 	stick.can_sleep = false
 	stick.collision_layer = 1 << 3
 	stick.collision_mask  = 1 << 0
+	stick.contact_monitor = true          # 🔹 Enable collision reporting
+	stick.max_contacts_reported = 1       # 🔹 Only need first hit
 	add_child(stick)
 
 	_make_stick_segment(Vector3.ZERO, Basis(), 1.0, base_thickness, stick)
@@ -244,6 +347,25 @@ func generate_stick() -> void:
 		randf_range(-3, 3),
 		randf_range(-3, 3)
 	)
+	
+	# 🔹 Add sound player to the stick
+	var sound := AudioStreamPlayer3D.new()
+	sound.stream = preload("res://assets/sounds/kirby-falling-meme-scream-made-with-Voicemod.mp3")
+	sound.autoplay = false
+
+	# Distance fade
+	sound.unit_size = 1.0
+	sound.max_distance = 50.0
+	sound.attenuation_model = AudioStreamPlayer3D.ATTENUATION_INVERSE_DISTANCE
+
+	stick.add_child(sound)
+	stick.set_meta("throw_sound", sound)
+
+	# 🔹 Stop sound instantly when it collides with *anything*
+	stick.body_entered.connect(func(_body):
+		if sound.playing:
+			sound.stop()
+	)
 
 
 func _make_stick_segment(start_pos: Vector3, start_basis: Basis, scale: float, parent_thickness: float, parent_node: Node3D) -> void:
@@ -251,7 +373,7 @@ func _make_stick_segment(start_pos: Vector3, start_basis: Basis, scale: float, p
 	if segs <= 0: return
 
 	var pos := start_pos
-	var seg_basis := start_basis  # ✅ renamed to avoid shadowing Node3D.basis
+	var seg_basis := start_basis
 
 	for i in range(segs):
 		var length: float = randf_range(segment_min_length, segment_max_length) * scale

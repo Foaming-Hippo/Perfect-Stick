@@ -183,6 +183,8 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
 
 [node name="Camera3D" type="Camera3D" parent="CollisionShape3D/Camera_Control"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.25, 0)
+doppler_tracking = 1
+current = true
 
 [node name="HandSocket" type="Node3D" parent="CollisionShape3D/Camera_Control/Camera3D"]
 
