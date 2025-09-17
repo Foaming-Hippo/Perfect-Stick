@@ -74,11 +74,15 @@ var heavy_throw_sounds: Array[AudioStream] = [
 	preload("res://assets/sounds/kirby-falling-meme-scream-made-with-Voicemod.mp3"),
 	preload("res://assets/sounds/streamer-scream-meme-made-with-Voicemod.mp3"),
 	preload("res://assets/sounds/jbl long.mp3"),
-	preload("res://assets/sounds/femur-breaker-(scream-only)-made-with-Voicemod.mp3")
+	preload("res://assets/sounds/femur-breaker-(scream-only)-made-with-Voicemod.mp3"),
+	preload("res://assets/sounds/raaaaauughh-made-with-Voicemod.mp3"),
+	preload("res://assets/sounds/loud-shitpost-fart-made-with-Voicemod.mp3"),
+	preload("res://assets/sounds/lobotomy-made-with-Voicemod.mp3"),
+	preload("res://assets/sounds/leeroy-jenkins-made-with-Voicemod.mp3"),
 ]
 var super_throw: Array[AudioStream] = [
 	preload("res://assets/sounds/tyler-1-scream-and-disappear-made-with-Voicemod.mp3"),
-	
+	preload("res://assets/sounds/eas-alarm-made-with-Voicemod.mp3")
 ]
 
 func play_throw_sound_if_hard(stick: RigidBody3D) -> void:
@@ -86,7 +90,7 @@ func play_throw_sound_if_hard(stick: RigidBody3D) -> void:
 	var speed := stick.linear_velocity.length()
 	var sound: AudioStreamPlayer3D = stick.get_meta("throw_sound")
 	if sound == null: return
-	if speed > 37.0:
+	if speed > 45.0:
 		sound.stream = super_throw[randi() % super_throw.size()]
 		sound.volume_db = 15.0
 	elif speed > 20.0:
