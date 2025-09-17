@@ -92,19 +92,19 @@ func play_throw_sound_if_hard(stick: RigidBody3D) -> void:
 	if sound == null: return
 	if speed > 45.0:
 		sound.stream = super_throw[randi() % super_throw.size()]
-		sound.volume_db = 15.0
+		sound.volume_db = 50.0
 	elif speed > 20.0:
 		# Heavy throw
 		sound.stream = heavy_throw_sounds[randi() % heavy_throw_sounds.size()]
-		sound.volume_db = 10.0   # +6dB louder
+		sound.volume_db = 35.0   # +6dB louder
 	elif speed > 12.0:
 		# Medium throw
 		sound.stream = medium_throw_sounds[randi() % medium_throw_sounds.size()]
-		sound.volume_db = 3.0
+		sound.volume_db = 6.0
 	elif speed > 6.0:
 		# Light throw
 		sound.stream = light_throw_sounds[randi() % light_throw_sounds.size()]
-		sound.volume_db = 0.0
+		sound.volume_db = 2.0
 	else:
 		return  # too soft, no sound
 
@@ -172,12 +172,34 @@ func pickup_nearest_stick() -> void:
 		held_stick.get_parent().remove_child(held_stick)
 	hand.add_child(held_stick)
 
-	var hold_offset := Transform3D(
-		Basis().rotated(Vector3.RIGHT, deg_to_rad(-30))
-			  .rotated(Vector3.UP, deg_to_rad(90)),
-		Vector3(0.3, -0.3, -0.7)
-	)
+	# 🔹 Align like a spear (base -> farthest branch forward)
+	var spear_dir := get_stick_direction(held_stick)
+	var rotation := Basis().looking_at(spear_dir, Vector3.UP)
+
+	var hold_offset := Transform3D(rotation, Vector3(0.3, -0.3, -0.7))
 	held_stick.transform = hold_offset
+
+
+# ───────────────
+# Spear Alignment Helper
+# ───────────────
+func get_stick_direction(stick: RigidBody3D) -> Vector3:
+	var base_pos: Vector3 = stick.global_transform.origin
+	var farthest_point: Vector3 = base_pos
+	var max_dist: float = -INF
+
+	for child in stick.get_children():
+		if child is MeshInstance3D:
+			var pos: Vector3 = child.global_transform.origin
+			var dist: float = base_pos.distance_to(pos)
+			if dist > max_dist:
+				max_dist = dist
+				farthest_point = pos
+
+	return (farthest_point - base_pos).normalized()
+
+
+
 
 
 func drop_stick() -> void:
