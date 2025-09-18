@@ -26,6 +26,7 @@ material = SubResource("StandardMaterial3D_e3ut3")
 [node name="Main" type="Node3D"]
 
 [node name="player" parent="." instance=ExtResource("5_0w1f6")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
 
 [node name="floor_1" type="MeshInstance3D" parent="."]
 transform = Transform3D(50, 0, 0, 0, 1, 0, 0, 0, 50, 0, 0, 0)

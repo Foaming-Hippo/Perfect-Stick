@@ -41,6 +41,21 @@ func _ready() -> void:
 
 
 func _input(event: InputEvent) -> void:
+	var edit_menu = get_tree().current_scene.get_node("UI/EditMenu") # adjust path
+
+	# handle toggling edit mode first
+	if event.is_action_pressed("edit_stick") and held_stick and edit_menu:
+		if edit_menu.in_edit_mode:
+			edit_menu.exit_edit_mode()
+		else:
+			edit_menu.enter_edit_mode(held_stick)
+		return  # stop here so it doesn’t trigger other actions
+
+	# block all other inputs if menu is open
+	if edit_menu and edit_menu.in_edit_mode:
+		return
+
+	# --- normal stick controls ---
 	if event.is_action_pressed("gen"):
 		generate_stick()
 
@@ -58,6 +73,8 @@ func _input(event: InputEvent) -> void:
 	# Capture flick mouse movement
 	if event is InputEventMouseMotion:
 		last_mouse_delta = event.relative
+
+
 
 
 # ───────────────

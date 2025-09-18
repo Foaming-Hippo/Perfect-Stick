@@ -1,7 +1,8 @@
-[gd_scene load_steps=4 format=3 uid="uid://bgfjcc2hkle34"]
+[gd_scene load_steps=5 format=3 uid="uid://bgfjcc2hkle34"]
 
 [ext_resource type="Theme" uid="uid://2l4uv4cw4gub" path="res://ui/themes/debug.tres" id="1_ks8t7"]
 [ext_resource type="Script" uid="uid://bxjqem00efvn3" path="res://ui/scripts/debug.gd" id="2_wl5ax"]
+[ext_resource type="Script" uid="uid://ignhvdh1lktb" path="res://ui/scripts/edit_menu.gd" id="4_tf0e0"]
 [ext_resource type="Script" uid="uid://dbogqo3e8fybi" path="res://ui/scripts/crosshair.gd" id="4_vkava"]
 
 [node name="UI" type="CanvasLayer"]
@@ -32,3 +33,30 @@ grow_vertical = 2
 mouse_filter = 1
 script = ExtResource("4_vkava")
 color = Color(1, 1, 1, 0.498039)
+
+[node name="EditMenu" type="CanvasLayer" parent="."]
+script = ExtResource("4_tf0e0")
+
+[node name="SubViewportContainer" type="SubViewportContainer" parent="EditMenu"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+stretch = true
+
+[node name="SubViewport" type="SubViewport" parent="EditMenu/SubViewportContainer"]
+handle_input_locally = false
+size = Vector2i(1152, 648)
+render_target_update_mode = 4
+
+[node name="EditCam3D" type="Camera3D" parent="EditMenu/SubViewportContainer/SubViewport"]
+visible = false
+
+[node name="ColorRect" type="ColorRect" parent="EditMenu"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.5)
