@@ -1,29 +1,33 @@
 extends CanvasLayer
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Transparent overlay “inspect” view that shows a clone of the held stick.
-# Other players still see the real stick (we hide it ONLY from the local camera
-# using a visual layer bit). The edit camera renders only the clone layer.
+# Transparent overlay “inspect” view.
+# - Real stick stays visible to other players (hidden only from local camera).
+# - A centered preview clone is spawned in front of the edit camera (fits view).
+# - Pivot center uses volume-weighted centroid (better than AABB midpoint).
 # ─────────────────────────────────────────────────────────────────────────────
 
-var stick: RigidBody3D = null          # real stick (in hand)
-var stick_clone_root: Node3D = null    # parent for preview meshes inside SubViewport
+var stick: RigidBody3D = null			# real stick (in hand)
+var stick_clone_root: Node3D = null		# (reserved for future live overlay)
+var pivot_clone_root: Node3D = null		# centered preview clone in SubViewport
 var in_edit_mode := false
 
 var player_camera: Camera3D = null
+var _clone_pairs: Array = []			# (reserved)
 
-# Clone <-> real mesh mapping for live sync
-var _clone_pairs: Array = []	# items: { "orig": MeshInstance3D, "clone": MeshInstance3D }
-
-# Visual layers (bits 0..19). We'll use 18 for "hide from local", 19 for "clone"
+# Visual layers (bits 0..19). 18 = hide-from-local, 19 = overlay/pivot clones
 const LOCAL_HIDE_BIT := 18
 const LOCAL_HIDE_MASK := 1 << LOCAL_HIDE_BIT
 const CLONE_LAYER_BIT := 19
 const CLONE_LAYER_MASK := 1 << CLONE_LAYER_BIT
 
-# Saved state to restore on exit
+# Saved state
 var _saved_main_cam_mask: int = 0
-var _saved_real_layers: Array = []	# items: { "mesh": MeshInstance3D, "layers": int }
+var _saved_real_layers: Array = []		# items: { "mesh": MeshInstance3D, "layers": int }
+
+# CENTER PREVIEW state
+var pivot_distance: float = 2.0			# distance from camera to pivot center
+var pivot_center_local: Vector3 = Vector3.ZERO
 
 func _ready():
 	visible = false
@@ -31,7 +35,6 @@ func _ready():
 	_resize_subviewport()
 	get_viewport().size_changed.connect(_resize_subviewport)
 
-	# Resolve the player camera once
 	var player = get_tree().current_scene.get_node("player")
 	if player:
 		player_camera = player.get_node("CollisionShape3D/Camera_Control/Camera3D") as Camera3D
@@ -42,13 +45,11 @@ func _ready():
 # ─────────────────────────────
 func _configure_subviewport():
 	var sv := $SubViewportContainer/SubViewport
-	# Same 3D world as the game (no world_3d assignment) so background shows through.
 	sv.disable_3d = false
 	sv.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	sv.render_target_clear_mode = SubViewport.CLEAR_MODE_ALWAYS
 	sv.transparent_bg = true
 
-	# Fill screen
 	$SubViewportContainer.set_anchors_preset(Control.PRESET_FULL_RECT)
 	$SubViewportContainer.stretch = true
 
@@ -66,17 +67,15 @@ func enter_edit_mode(target: RigidBody3D):
 	in_edit_mode = true
 	stick = target
 
-	# IMPORTANT: We do NOT set stick.visible = false. Other players still need to see it.
-	# We also don't touch physics here (your held logic already manages freeze/gravity).
-
-	# Hide ONLY from *local* camera by moving the real meshes to LOCAL_HIDE layer
+	# Hide ONLY from local camera via layer bit (others still see it)
 	_saved_real_layers.clear()
 	_set_real_meshes_local_hidden(true)
 
-	# Build clone meshes on a dedicated CLONE layer rendered only by the EditCam
-	_build_clone_meshes()
+	# Hide the ColorRect so the clone isn't covered
+	if $SubViewportContainer.has_node("ColorRect"):
+		$SubViewportContainer/ColorRect.visible = false
 
-	# Configure the edit camera to mirror player camera and render only clones
+	# EDIT CAM mirrors player cam and renders only clones
 	var cam: Camera3D = $SubViewportContainer/SubViewport/EditCam3D
 	cam.current = true
 	cam.visible = true
@@ -87,15 +86,17 @@ func enter_edit_mode(target: RigidBody3D):
 		cam.far = player_camera.far
 	cam.cull_mask = CLONE_LAYER_MASK
 
-	# Exclude LOCAL_HIDE + CLONE from the player camera so you only see the overlay clone
+	# Local player camera: hide LOCAL_HIDE + CLONE layers
 	_saved_main_cam_mask = player_camera.cull_mask
 	player_camera.cull_mask = _saved_main_cam_mask & ~LOCAL_HIDE_MASK & ~CLONE_LAYER_MASK
 
-	# Show overlay, free mouse
+	# CENTER PREVIEW: build & center a duplicate in front of the edit camera
+	_build_center_preview(cam)
+
+	# UI/mouse & pause behavior
 	visible = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
-	# Disable player controls locally (others still see you with your real stick)
 	var player := get_tree().current_scene.get_node("player")
 	player.set_process_input(false)
 	player.set_physics_process(false)
@@ -104,32 +105,37 @@ func exit_edit_mode():
 	if not in_edit_mode:
 		return
 
-	# Remove clone meshes
+	# Remove center preview
+	if is_instance_valid(pivot_clone_root):
+		pivot_clone_root.queue_free()
+	pivot_clone_root = null
+
+	# Remove (future) overlay clone if present
 	if is_instance_valid(stick_clone_root):
 		stick_clone_root.queue_free()
 	stick_clone_root = null
 	_clone_pairs.clear()
 
-	# Restore real meshes' visual layers
+	# Restore real meshes and camera masks
 	_set_real_meshes_local_hidden(false)
-
-	# Restore player camera cull mask
 	if player_camera:
 		player_camera.cull_mask = _saved_main_cam_mask
+
+	# Turn ColorRect back on (if you use it)
+	if $SubViewportContainer.has_node("ColorRect"):
+		$SubViewportContainer/ColorRect.visible = true
 
 	# Turn off edit cam
 	var cam: Camera3D = $SubViewportContainer/SubViewport/EditCam3D
 	cam.current = false
 	cam.visible = false
 
-	# Hide overlay, recapture mouse
 	visible = false
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 	in_edit_mode = false
 	stick = null
 
-	# Re-enable player controls
 	var player := get_tree().current_scene.get_node("player")
 	player.set_process_input(true)
 	player.set_physics_process(true)
@@ -140,24 +146,24 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 # ─────────────────────────────
-# Live sync (camera + meshes)
+# Live sync camera & keep pivot centered
 # ─────────────────────────────
 func _process(_delta: float) -> void:
 	if not in_edit_mode:
 		return
 
-	# Keep edit cam aligned with player cam
+	# Keep edit cam matched to player cam (so background matches perfectly)
 	if player_camera:
 		var cam: Camera3D = $SubViewportContainer/SubViewport/EditCam3D
 		cam.global_transform = player_camera.global_transform
 		cam.fov = player_camera.fov
-
-	# Sync each clone's global transform from its original
-	for pair in _clone_pairs:
-		var orig := pair["orig"] as MeshInstance3D
-		var clone := pair["clone"] as MeshInstance3D
-		if is_instance_valid(orig) and is_instance_valid(clone):
-			clone.global_transform = orig.global_transform
+		# Keep pivot clone centered in front of the camera at pivot_distance
+		if is_instance_valid(pivot_clone_root):
+			var forward := -cam.global_transform.basis.z
+			var target_pos := cam.global_transform.origin + forward * pivot_distance
+			var xf := pivot_clone_root.global_transform
+			xf.origin = target_pos
+			pivot_clone_root.global_transform = xf
 
 
 # ─────────────────────────────
@@ -172,11 +178,11 @@ func _set_real_meshes_local_hidden(state: bool) -> void:
 		if child is MeshInstance3D:
 			var m := child as MeshInstance3D
 			if state:
-				# save once
+				# save current layers then move mesh to LOCAL_HIDE only
 				_saved_real_layers.append({ "mesh": m, "layers": m.layers })
-				m.layers = m.layers | LOCAL_HIDE_MASK
+				m.layers = LOCAL_HIDE_MASK
 			else:
-				# restore
+				# restore original layers
 				for entry in _saved_real_layers:
 					if entry["mesh"] == m:
 						m.layers = entry["layers"]
@@ -184,21 +190,95 @@ func _set_real_meshes_local_hidden(state: bool) -> void:
 	if not state:
 		_saved_real_layers.clear()
 
-# Build clone meshes on CLONE layer; skip outline meshes (we only want the base geometry)
-func _build_clone_meshes():
-	_clone_pairs.clear()
+# ───── CENTER PREVIEW: build a centered, camera-space clone ─────
+func _build_center_preview(cam: Camera3D):
+	# Build root under SubViewport
+	pivot_clone_root = Node3D.new()
+	pivot_clone_root.name = "PivotCloneRoot"
+	$SubViewportContainer/SubViewport.add_child(pivot_clone_root)
 
-	stick_clone_root = Node3D.new()
-	stick_clone_root.name = "StickCloneRoot"
-	$SubViewportContainer/SubViewport.add_child(stick_clone_root)
-
+	# Clone only base meshes (skip yellow outlines)
+	var clones: Array[MeshInstance3D] = []
 	for child in stick.get_children():
 		if child is MeshInstance3D and child.has_meta("outline"):
-			var orig_mesh := child as MeshInstance3D
-			var clone_mesh := MeshInstance3D.new()
-			clone_mesh.mesh = orig_mesh.mesh
-			clone_mesh.material_override = orig_mesh.material_override
-			clone_mesh.global_transform = orig_mesh.global_transform
-			clone_mesh.layers = CLONE_LAYER_MASK
-			stick_clone_root.add_child(clone_mesh)
-			_clone_pairs.append({ "orig": orig_mesh, "clone": clone_mesh })
+			var orig := child as MeshInstance3D
+			var clone := MeshInstance3D.new()
+			clone.mesh = orig.mesh
+			clone.material_override = orig.material_override
+			clone.transform = orig.transform	# start with same local
+			clone.layers = CLONE_LAYER_MASK
+			pivot_clone_root.add_child(clone)
+			clones.append(clone)
+
+	# Compute merged AABB in pivot_root local space (for sizing)
+	var merged: AABB = _merged_local_aabb(pivot_clone_root)
+	if merged.size == Vector3.ZERO:
+		merged.size = Vector3.ONE
+
+	# Use volume-weighted centroid as pivot center (more natural than midpoint)
+	var center: Vector3 = _centroid_local(pivot_clone_root)
+	pivot_center_local = center
+	pivot_clone_root.translate_object_local(-center)
+
+	# Compute a comfy camera distance to fit it in view (vertical FOV)
+	var max_dim: float = max(merged.size.x, max(merged.size.y, merged.size.z))
+	var fov_rad: float = deg_to_rad(cam.fov)
+	var fit_dist: float = (max_dim * 0.5) / tan(fov_rad * 0.5)
+	pivot_distance = fit_dist * 1.2	# margin
+
+	# Place root in front of the camera by pivot_distance
+	var forward := -cam.global_transform.basis.z
+	var target_pos := cam.global_transform.origin + forward * pivot_distance
+	var xf := Transform3D(Basis(), target_pos)
+	pivot_clone_root.global_transform = xf
+
+# Merge all MeshInstance3D AABBs in the given node's local space
+func _merged_local_aabb(root: Node3D) -> AABB:
+	var first := true
+	var acc := AABB()
+	for child in root.get_children():
+		if child is MeshInstance3D:
+			var mi := child as MeshInstance3D
+			var local_aabb := mi.get_aabb()
+			var world_aabb := _aabb_transformed(local_aabb, mi.transform) # child local -> root local
+			if first:
+				acc = world_aabb
+				first = false
+			else:
+				acc = acc.merge(world_aabb)
+	return acc
+
+# Volume-weighted centroid of all child mesh AABBs in root local space
+func _centroid_local(root: Node3D) -> Vector3:
+	var total_vol: float = 0.0
+	var acc: Vector3 = Vector3.ZERO
+	for child in root.get_children():
+		if child is MeshInstance3D:
+			var mi := child as MeshInstance3D
+			var aabb_local: AABB = _aabb_transformed(mi.get_aabb(), mi.transform)
+			var vol: float = aabb_local.size.x * aabb_local.size.y * aabb_local.size.z
+			if vol <= 0.0:
+				continue
+			var c: Vector3 = aabb_local.position + aabb_local.size * 0.5
+			acc += c * vol
+			total_vol += vol
+	if total_vol <= 0.0:
+		return Vector3.ZERO
+	return acc / total_vol
+
+# Transform an AABB by a Transform3D (approx via 8 points)
+func _aabb_transformed(aabb: AABB, xform: Transform3D) -> AABB:
+	var p := [
+		aabb.position,
+		aabb.position + Vector3(aabb.size.x, 0, 0),
+		aabb.position + Vector3(0, aabb.size.y, 0),
+		aabb.position + Vector3(0, 0, aabb.size.z),
+		aabb.position + Vector3(aabb.size.x, aabb.size.y, 0),
+		aabb.position + Vector3(aabb.size.x, 0, aabb.size.z),
+		aabb.position + Vector3(0, aabb.size.y, aabb.size.z),
+		aabb.position + aabb.size
+	]
+	var a := AABB(xform * p[0], Vector3.ZERO)
+	for i in range(1, p.size()):
+		a = a.expand(xform * p[i])
+	return a
