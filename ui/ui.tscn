@@ -13,7 +13,6 @@ shader = ExtResource("5_tf0e0")
 shader_parameter/screen_size = Vector2(0, 0)
 shader_parameter/thickness = 3.0
 shader_parameter/outline_color = Color(1, 1, 0, 1)
-shader_parameter/enabled = 0.0
 
 [node name="UI" type="CanvasLayer"]
 

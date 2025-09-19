@@ -1,13 +1,12 @@
 extends CanvasLayer
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Edit Overlay / Inspector
-# - Builds a clone tree from the real stick hierarchy (branch_X/segment_Y)
-# - Renames clones to base(N)_segment(M) by recursion depth
-# - Generates colliders + inverted backface "thick outline" meshes
-# - Keeps preview centered in a SubViewport following the player camera
-# - Hover detection via ray → AABB slab test, outline toggling on hover
-# - UI outliner (ColorRect) draws the post-process screen outline you made
+# Transparent overlay “inspect” view.
+# - Pivot = chosen branch (default: center).
+# - Left-drag = rotate (yaw locked to world UP).
+# - Wheel/Q/E = zoom, Right-click = reset.
+# - Highlight system: shader outline only (no blocky clones).
+# - Hover system: raycast against clone colliders.
 # ─────────────────────────────────────────────────────────────────────────────
 
 var stick: RigidBody3D = null
@@ -38,25 +37,21 @@ const MAX_DIST := 50.0
 var _orbit_drag := false
 var _last_mouse_pos: Vector2
 
-var _clone_pairs: Array = []	# [{original: MeshInstance3D, clone: MeshInstance3D}]
-
-# Optional: keep a flat list of all clone MeshInstance3D for convenience
-var _all_clone_meshes: Array = []
-
-# Debug hooks (optional labels inside UI/Debug)
+# Debug hooks
 var debug_menu = null
 
 # ─────────────────────────────
 # Ready
 # ─────────────────────────────
-func _ready() -> void:
+func _ready():
 	var sv: SubViewport = $SubViewportContainer/SubViewport
 	var outline_rect: ColorRect = $outliner
 	var mat := outline_rect.material as ShaderMaterial
+
 	if mat:
 		mat.set_shader_parameter("screen_tex", sv.get_texture())
 		mat.set_shader_parameter("screen_size", Vector2(sv.size))
-	print("SV Texture: ", sv.get_texture())
+		mat.set_shader_parameter("enabled", 0.0)
 
 	visible = false
 	process_priority = 1000000
@@ -68,7 +63,7 @@ func _ready() -> void:
 	_ensure_dimmer_order()
 	_create_input_catcher()
 
-	var player = get_tree().current_scene.get_node_or_null("player")
+	var player = get_tree().current_scene.get_node("player")
 	if player:
 		player_camera = player.get_node("CollisionShape3D/Camera_Control/Camera3D") as Camera3D
 
@@ -78,7 +73,7 @@ func _ready() -> void:
 # ─────────────────────────────
 # SubViewport helpers
 # ─────────────────────────────
-func _configure_subviewport() -> void:
+func _configure_subviewport():
 	var sv := $SubViewportContainer/SubViewport
 	sv.disable_3d = false
 	sv.render_target_update_mode = SubViewport.UPDATE_ALWAYS
@@ -99,7 +94,7 @@ func _configure_subviewport() -> void:
 	svc.stretch = true
 	svc.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-func _resize_subviewport() -> void:
+func _resize_subviewport():
 	var sv := $SubViewportContainer/SubViewport
 	var screen_size := get_viewport().get_visible_rect().size
 	sv.size = screen_size * 2
@@ -120,7 +115,7 @@ func _ensure_dimmer_order() -> void:
 	if p:
 		p.move_child(svc, p.get_child_count() - 1)
 
-func _create_input_catcher() -> void:
+func _create_input_catcher():
 	_catcher = ColorRect.new()
 	_catcher.name = "InputCatcher"
 	_catcher.color = Color(0, 0, 0, 0)
@@ -135,7 +130,7 @@ func _create_input_catcher() -> void:
 # ─────────────────────────────
 # Enter / Exit
 # ─────────────────────────────
-func enter_edit_mode(target: RigidBody3D) -> void:
+func enter_edit_mode(target: RigidBody3D):
 	if not target or in_edit_mode:
 		return
 	in_edit_mode = true
@@ -174,7 +169,7 @@ func enter_edit_mode(target: RigidBody3D) -> void:
 	if player.has_method("set_ui_lock"):
 		player.call_deferred("set_ui_lock", true)
 
-func exit_edit_mode() -> void:
+func exit_edit_mode():
 	if not in_edit_mode:
 		return
 	if is_instance_valid(pivot_clone_root):
@@ -212,7 +207,6 @@ func exit_edit_mode() -> void:
 func _on_catcher_gui_input(event: InputEvent) -> void:
 	if not in_edit_mode:
 		return
-
 	if event.is_action_pressed("ui_cancel"):
 		exit_edit_mode()
 		get_viewport().set_input_as_handled()
@@ -255,14 +249,15 @@ func _on_catcher_gui_input(event: InputEvent) -> void:
 func _process(delta: float) -> void:
 	if not in_edit_mode:
 		return
-
 	if player_camera and is_instance_valid(pivot_clone_root):
 		var cam: Camera3D = $SubViewportContainer/SubViewport/EditCam3D
 		cam.global_transform = player_camera.global_transform
 		cam.fov = player_camera.fov
 		var forward := -cam.global_transform.basis.z
 		var up := cam.global_transform.basis.y
-		var target_pos := cam.global_transform.origin + forward * pivot_distance + up * (_preview_size.y * view_up_bias)
+		var target_pos := cam.global_transform.origin \
+			+ forward * pivot_distance \
+			+ up * (_preview_size.y * view_up_bias)
 		var xf := pivot_clone_root.transform
 		xf.origin = target_pos
 		pivot_clone_root.transform = xf
@@ -272,12 +267,17 @@ func _process(delta: float) -> void:
 		if Input.is_action_pressed("zoom_out"):
 			pivot_distance = clamp(pivot_distance + delta * 2.0, MIN_DIST, MAX_DIST)
 
-	# Debug hover/highlight
+		var mat := $outliner.material as ShaderMaterial
+		if mat:
+			var enabled := 0.0
+			if debug_menu and debug_menu.visible:
+				enabled = 1.0
+			mat.set_shader_parameter("enabled", enabled)
+
+	# Debug info
 	if debug_menu and debug_menu.visible:
 		var hovered := _get_hovered_branch()
-		_clear_all_highlights()
 		if hovered:
-			_set_highlight(hovered, true)
 			debug_menu.branch_label.text = "Hovering over: %s" % hovered.name
 		else:
 			debug_menu.branch_label.text = "Not over branch"
@@ -285,204 +285,9 @@ func _process(delta: float) -> void:
 		if is_instance_valid(pivot_clone_root):
 			var count := 0
 			for child in pivot_clone_root.get_node("ModelRot").get_children():
-				if child is MeshInstance3D and child.has_meta("outline"):
+				if child is MeshInstance3D:
 					count += 1
 			debug_menu.count_label.text = "Branch Count: %d" % count
-
-# ─────────────────────────────
-# Clone Tree (branch_X / segment_Y -> base(N)_segment(M))
-# ─────────────────────────────
-
-# Recursively clone one branch node. base_id increases with depth.
-# seg_counter is a small dictionary used as a mutable integer: { "val": 0 }
-func _clone_branch(branch_node: Node3D, base_id: int, clone_root: Node3D, seg_counter: Dictionary) -> void:
-	if branch_node == null:
-		return
-
-	var local_segment_index := 0
-
-	for child in branch_node.get_children():
-		if typeof(child) != TYPE_OBJECT:
-			continue
-
-		# Match both Branch_X_Segment_Y and plain Segment_Y meshes
-		if child is MeshInstance3D and (
-			"segment" in child.name.to_lower() or "branch" in child.name.to_lower()
-		):
-			var orig := child as MeshInstance3D
-
-			# Main visible clone
-			var clone := MeshInstance3D.new()
-			clone.mesh = orig.mesh
-			clone.transform = orig.transform
-			clone.layers = CLONE_LAYER_MASK
-			var vis_mat := StandardMaterial3D.new()
-			vis_mat.albedo_color = Color(1, 0, 0) # bright red for debug
-			clone.material_override = vis_mat
-			clone.name = "Base(%d)_Segment(%d)" % [base_id, local_segment_index]
-			clone.set_meta("branch_name", orig.name)
-			clone_root.add_child(clone)
-			_all_clone_meshes.append(clone)
-			_clone_pairs.append({ "original": orig, "clone": clone })
-
-			print("CLONED:", clone.name, "from", orig.name)
-
-			# Collider
-			var collider := StaticBody3D.new()
-			var shape := CollisionShape3D.new()
-			shape.shape = orig.mesh.create_trimesh_shape()
-			collider.add_child(shape)
-			collider.name = "Collider_%d" % int(seg_counter.get("val", 0))
-			collider.set_meta("branch_clone", clone)
-			collider.collision_layer = CLONE_LAYER_MASK
-			clone_root.add_child(collider)
-
-			# Backface outline shell
-			var outline := MeshInstance3D.new()
-			outline.mesh = orig.mesh
-			outline.visible = false
-			outline.transform = orig.transform
-			outline.scale = Vector3(1.15, 1.15, 1.15)
-			var outline_mat := StandardMaterial3D.new()
-			outline_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-			outline_mat.albedo_color = Color(1, 1, 0)
-			outline_mat.emission_enabled = true
-			outline_mat.emission = Color(1, 1, 0)
-			outline_mat.cull_mode = BaseMaterial3D.CULL_FRONT
-			outline.material_override = outline_mat
-			outline.name = "%s_outline" % clone.name
-			clone_root.add_child(outline)
-			clone.set_meta("outline", outline)
-
-			local_segment_index += 1
-			seg_counter["val"] = int(seg_counter.get("val", 0)) + 1
-
-
-
-
-
-func _find_root_branch(real_stick: Node3D) -> Node3D:
-	for child in real_stick.get_children():
-		var n := child.name.to_lower()
-		if n.begins_with("branch_0"):
-			return child
-	return null
-	
-# Build clone meshes by scanning ALL children of the stick
-func _generate_clone_tree(real_stick: Node3D, clone_root: Node3D) -> void:
-	_all_clone_meshes.clear()
-	_clone_pairs.clear()
-
-	if real_stick == null or clone_root == null:
-		return
-
-	var seg_counter := { "val": 0 }
-
-	for child in real_stick.get_children():
-		if child is MeshInstance3D:
-			var n := child.name.to_lower()
-			if "segment" in n and "branch" in n:
-				_clone_segment(child, clone_root, seg_counter)
-
-
-func _clone_segment(orig: MeshInstance3D, clone_root: Node3D, seg_counter: Dictionary) -> void:
-	# Parse base/seg numbers from the name
-	var base_id := 0
-	var seg_id: int = int(seg_counter["val"])
-	var parts := orig.name.split("_")
-	if parts.size() >= 4 and parts[0].to_lower() == "branch" and parts[2].to_lower() == "segment":
-		base_id = int(parts[1])
-		seg_id = int(parts[3])
-
-	# Visible clone
-	var clone := MeshInstance3D.new()
-	clone.mesh = orig.mesh
-	clone.transform = orig.transform
-	clone.layers = CLONE_LAYER_MASK
-	var vis_mat := StandardMaterial3D.new()
-	vis_mat.albedo_color = Color(1, 0, 0) # bright red debug
-	clone.material_override = vis_mat
-	clone.name = "Base(%d)_Segment(%d)" % [base_id, seg_id]
-	clone.set_meta("branch_name", orig.name)
-	clone_root.add_child(clone)
-	_all_clone_meshes.append(clone)
-	_clone_pairs.append({ "original": orig, "clone": clone })
-
-	print("CLONED:", clone.name, "from", orig.name)
-
-	# Collider
-	if orig.mesh:
-		var collider := StaticBody3D.new()
-		var shape := CollisionShape3D.new()
-		shape.shape = orig.mesh.create_trimesh_shape()
-		collider.add_child(shape)
-		collider.name = "Collider_%d" % int(seg_counter["val"])
-		collider.set_meta("branch_clone", clone)
-		collider.collision_layer = CLONE_LAYER_MASK
-		clone_root.add_child(collider)
-
-	# Outline shell
-	var outline := MeshInstance3D.new()
-	outline.mesh = orig.mesh
-	outline.visible = false
-	outline.transform = orig.transform
-	outline.scale = Vector3(1.15, 1.15, 1.15)
-	var outline_mat := StandardMaterial3D.new()
-	outline_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	outline_mat.albedo_color = Color(1, 1, 0)
-	outline_mat.emission_enabled = true
-	outline_mat.emission = Color(1, 1, 0)
-	outline_mat.cull_mode = BaseMaterial3D.CULL_FRONT
-	outline.material_override = outline_mat
-	outline.name = "%s_outline" % clone.name
-	clone_root.add_child(outline)
-	clone.set_meta("outline", outline)
-
-	seg_counter["val"] = int(seg_counter["val"]) + 1
-
-
-
-# ─────────────────────────────
-# Build / Center preview
-# ─────────────────────────────
-func _build_center_preview(cam: Camera3D) -> void:
-	# Create pivot + container where all clones live
-	pivot_clone_root = Node3D.new()
-	pivot_clone_root.name = "PivotCloneRoot"
-	$SubViewportContainer/SubViewport.add_child(pivot_clone_root)
-
-	var model_rot := Node3D.new()
-	model_rot.name = "ModelRot"
-	pivot_clone_root.add_child(model_rot)
-
-	# Fill it with clones
-	_generate_clone_tree(stick, model_rot)
-
-	# Center to origin and face camera
-	model_rot.rotate_object_local(Vector3.FORWARD, -PI * 0.5)
-	var center := _centroid_local(model_rot)
-	model_rot.translate_object_local(-center)
-
-	var forward := -cam.global_transform.basis.z
-	if forward.length_squared() < 1e-6:
-		forward = Vector3.FORWARD
-	var right := Vector3.UP.cross(forward).normalized()
-	pivot_clone_root.basis = Basis(right, Vector3.UP, -forward)
-
-	# Fit distance
-	var merged := _merged_local_aabb(model_rot)
-	if merged.size == Vector3.ZERO:
-		merged.size = Vector3.ONE
-	_preview_size = merged.size
-	var max_dim: float = max(merged.size.x, max(merged.size.y, merged.size.z))
-	var fov_rad: float = deg_to_rad(cam.fov)
-	var fit_dist: float = (max_dim * 0.5) / tan(fov_rad * 0.5)
-	_fit_distance_base = fit_dist * 1.2
-	pivot_distance = clamp(_fit_distance_base, MIN_DIST, MAX_DIST)
-
-	var up := cam.global_transform.basis.y
-	var target_pos := cam.global_transform.origin + (-cam.global_transform.basis.z) * pivot_distance + up * (_preview_size.y * view_up_bias)
-	pivot_clone_root.transform = Transform3D(pivot_clone_root.basis, target_pos)
 
 # ─────────────────────────────
 # Hover detection (ray → AABB)
@@ -490,6 +295,7 @@ func _build_center_preview(cam: Camera3D) -> void:
 func _get_hovered_branch() -> MeshInstance3D:
 	if not is_instance_valid(pivot_clone_root):
 		return null
+
 	var cam: Camera3D = $SubViewportContainer/SubViewport/EditCam3D
 	var sv: SubViewport = $SubViewportContainer/SubViewport
 	var container: Control = $SubViewportContainer
@@ -506,9 +312,8 @@ func _get_hovered_branch() -> MeshInstance3D:
 	var closest: MeshInstance3D = null
 	var closest_dist := INF
 
-	var model_rot := pivot_clone_root.get_node("ModelRot") as Node3D
-	for child in model_rot.get_children():
-		if child is MeshInstance3D and child.has_meta("outline"):
+	for child in pivot_clone_root.get_node("ModelRot").get_children():
+		if child is MeshInstance3D:
 			var aabb := _aabb_transformed(child.get_aabb(), child.global_transform)
 
 			var tmin := -INF
@@ -518,6 +323,7 @@ func _get_hovered_branch() -> MeshInstance3D:
 				var d := dir[i]
 				var mn := aabb.position[i]
 				var mx := aabb.position[i] + aabb.size[i]
+
 				if abs(d) < 1e-6:
 					if o < mn or o > mx:
 						tmin = INF
@@ -536,32 +342,31 @@ func _get_hovered_branch() -> MeshInstance3D:
 
 			if tmin < INF and tmin > 0.0 and tmin < closest_dist:
 				closest_dist = tmin
-				closest = child as MeshInstance3D
+				closest = child
 
 	return closest
 
 # ─────────────────────────────
-# Highlight helpers
+# Helpers
 # ─────────────────────────────
-func _set_highlight(mesh: MeshInstance3D, state: bool) -> void:
-	if mesh and mesh.has_meta("outline"):
-		var outline: MeshInstance3D = mesh.get_meta("outline")
-		if outline:
-			outline.visible = state
-
-func _clear_all_highlights() -> void:
+func _reset_view():
 	if not is_instance_valid(pivot_clone_root):
 		return
-	var model_rot := pivot_clone_root.get_node("ModelRot") as Node3D
-	for child in model_rot.get_children():
-		if child is MeshInstance3D and child.has_meta("outline"):
-			var outline: MeshInstance3D = child.get_meta("outline")
-			if outline:
-				outline.visible = false
+	var cam: Camera3D = $SubViewportContainer/SubViewport/EditCam3D
+	var forward := -cam.global_transform.basis.z
+	if forward.length_squared() < 1e-6:
+		forward = Vector3.FORWARD
+	forward = forward.normalized()
+	var right := Vector3.UP.cross(forward).normalized()
+	var flat := Basis(right, Vector3.UP, -forward)
+	var up := cam.global_transform.basis.y
+	var target_pos := cam.global_transform.origin \
+		+ (-cam.global_transform.basis.z) * pivot_distance \
+		+ up * (_preview_size.y * view_up_bias)
+	pivot_clone_root.transform = Transform3D(flat, target_pos)
+	pivot_distance = clamp(_fit_distance_base, MIN_DIST, MAX_DIST)
+	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 
-# ─────────────────────────────
-# Real mesh visibility (local hide)
-# ─────────────────────────────
 func _set_real_meshes_local_hidden(state: bool) -> void:
 	if not is_instance_valid(stick):
 		return
@@ -579,28 +384,72 @@ func _set_real_meshes_local_hidden(state: bool) -> void:
 	if not state:
 		_saved_real_layers.clear()
 
-# ─────────────────────────────
-# View helpers
-# ─────────────────────────────
-func _reset_view() -> void:
-	if not is_instance_valid(pivot_clone_root):
-		return
-	var cam: Camera3D = $SubViewportContainer/SubViewport/EditCam3D
+func _build_center_preview(cam: Camera3D):
+	pivot_clone_root = Node3D.new()
+	pivot_clone_root.name = "PivotCloneRoot"
+	$SubViewportContainer/SubViewport.add_child(pivot_clone_root)
+
+	var model_rot := Node3D.new()
+	model_rot.name = "ModelRot"
+	pivot_clone_root.add_child(model_rot)
+
+	var seg_index := 0
+	for child in stick.get_children():
+		if child is MeshInstance3D:
+			seg_index += 1
+			var orig := child as MeshInstance3D
+
+			# Clone of the real mesh (brown stick)
+			var clone := MeshInstance3D.new()
+			clone.mesh = orig.mesh
+			clone.transform = orig.transform
+			clone.layers = CLONE_LAYER_MASK
+			var mat := StandardMaterial3D.new()
+			mat.albedo_color = Color(0.45, 0.28, 0.15, 1.0) # brown
+			clone.material_override = mat
+			clone.name = "Seg_%d" % seg_index
+			clone.set_meta("branch_name", orig.name)
+			model_rot.add_child(clone)
+
+			# Collider for hover detection
+			var collider := StaticBody3D.new()
+			var shape := CollisionShape3D.new()
+			shape.shape = orig.mesh.create_trimesh_shape()
+			collider.add_child(shape)
+			collider.name = "Collider_%d" % seg_index
+			collider.set_meta("branch_clone", clone)
+			collider.collision_layer = CLONE_LAYER_MASK
+			model_rot.add_child(collider)
+
+	# ─────────────────────────────
+	# Center and fit to camera
+	# ─────────────────────────────
+	model_rot.rotate_object_local(Vector3.FORWARD, -PI * 0.5)
+	var center := _centroid_local(model_rot)
+	model_rot.translate_object_local(-center)
+
 	var forward := -cam.global_transform.basis.z
 	if forward.length_squared() < 1e-6:
 		forward = Vector3.FORWARD
-	forward = forward.normalized()
 	var right := Vector3.UP.cross(forward).normalized()
-	var flat := Basis(right, Vector3.UP, -forward)
-	var up := cam.global_transform.basis.y
-	var target_pos := cam.global_transform.origin + (-cam.global_transform.basis.z) * pivot_distance + up * (_preview_size.y * view_up_bias)
-	pivot_clone_root.transform = Transform3D(flat, target_pos)
-	pivot_distance = clamp(_fit_distance_base, MIN_DIST, MAX_DIST)
-	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+	pivot_clone_root.basis = Basis(right, Vector3.UP, -forward)
 
-# ─────────────────────────────
-# Geometry
-# ─────────────────────────────
+	var merged := _merged_local_aabb(model_rot)
+	if merged.size == Vector3.ZERO:
+		merged.size = Vector3.ONE
+	_preview_size = merged.size
+	var max_dim: float = max(merged.size.x, max(merged.size.y, merged.size.z))
+	var fov_rad: float = deg_to_rad(cam.fov)
+	var fit_dist: float = (max_dim * 0.5) / tan(fov_rad * 0.5)
+	_fit_distance_base = fit_dist * 1.2
+	pivot_distance = clamp(_fit_distance_base, MIN_DIST, MAX_DIST)
+
+	var up := cam.global_transform.basis.y
+	var target_pos := cam.global_transform.origin \
+		+ (-cam.global_transform.basis.z) * pivot_distance \
+		+ up * (_preview_size.y * view_up_bias)
+	pivot_clone_root.transform = Transform3D(pivot_clone_root.basis, target_pos)
+
 func _centroid_local(root: Node3D) -> Vector3:
 	var total_vol: float = 0.0
 	var acc: Vector3 = Vector3.ZERO
@@ -643,7 +492,8 @@ func _aabb_transformed(aabb: AABB, xform: Transform3D) -> AABB:
 		aabb.position + aabb.size
 	]
 
-	var out := AABB(xform * p[0], Vector3.ZERO)
+	var a := AABB(xform * p[0], Vector3.ZERO)
 	for i in range(1, p.size()):
-		out = out.expand(xform * p[i])
-	return out
+		a = a.expand(xform * p[i])
+
+	return a
