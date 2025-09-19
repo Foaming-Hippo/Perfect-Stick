@@ -44,6 +44,24 @@ var debug_menu = null
 # Ready
 # ─────────────────────────────
 func _ready():
+	var sv: SubViewport = $SubViewportContainer/SubViewport
+	var outline_rect: ColorRect = $outliner
+	var mat := outline_rect.material as ShaderMaterial
+
+	if mat:
+		mat.set_shader_parameter("screen_tex", sv.get_texture())
+		mat.set_shader_parameter("screen_size", Vector2(sv.size))
+		
+	print("SV Texture: ", sv.get_texture())
+
+
+
+
+
+
+
+
+
 	visible = false
 	process_priority = 1000000
 	process_mode = Node.PROCESS_MODE_ALWAYS
