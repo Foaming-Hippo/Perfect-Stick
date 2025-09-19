@@ -249,6 +249,7 @@ func _on_catcher_gui_input(event: InputEvent) -> void:
 func _process(delta: float) -> void:
 	if not in_edit_mode:
 		return
+
 	if player_camera and is_instance_valid(pivot_clone_root):
 		var cam: Camera3D = $SubViewportContainer/SubViewport/EditCam3D
 		cam.global_transform = player_camera.global_transform
@@ -267,12 +268,29 @@ func _process(delta: float) -> void:
 		if Input.is_action_pressed("zoom_out"):
 			pivot_distance = clamp(pivot_distance + delta * 2.0, MIN_DIST, MAX_DIST)
 
-		var mat := $outliner.material as ShaderMaterial
-		if mat:
-			var enabled := 0.0
-			if debug_menu and debug_menu.visible:
-				enabled = 1.0
-			mat.set_shader_parameter("enabled", enabled)
+	# Access shader
+	var mat := $outliner.material as ShaderMaterial
+	if not mat:
+		return
+
+	if debug_menu != null and debug_menu.visible:
+		# Debug ON → show outline on all
+		mat.set_shader_parameter("enabled", 1.0)
+		for child in pivot_clone_root.get_node("ModelRot").get_children():
+			if child is MeshInstance3D:
+				child.layers = CLONE_LAYER_MASK
+	else:
+		# Debug OFF → only hovered branch
+		var hovered := _get_hovered_branch()
+		if hovered:
+			mat.set_shader_parameter("enabled", 1.0)
+			# Set hovered visible to outline
+			for child in pivot_clone_root.get_node("ModelRot").get_children():
+				if child is MeshInstance3D:
+					child.layers = 0
+			hovered.layers = CLONE_LAYER_MASK
+		else:
+			mat.set_shader_parameter("enabled", 0.0)
 
 	# Debug info
 	if debug_menu and debug_menu.visible:
@@ -283,10 +301,7 @@ func _process(delta: float) -> void:
 			debug_menu.branch_label.text = "Not over branch"
 
 		if is_instance_valid(pivot_clone_root):
-			var count := 0
-			for child in pivot_clone_root.get_node("ModelRot").get_children():
-				if child is MeshInstance3D:
-					count += 1
+			var count := pivot_clone_root.get_node("ModelRot").get_child_count()
 			debug_menu.count_label.text = "Branch Count: %d" % count
 
 # ─────────────────────────────
@@ -349,6 +364,65 @@ func _get_hovered_branch() -> MeshInstance3D:
 # ─────────────────────────────
 # Helpers
 # ─────────────────────────────
+
+# Parse branch info from a node’s metadata
+func _parse_branch_info(node: Node) -> Dictionary:
+	if not node or not node.has_meta("branch_name"):
+		return {}
+	var parts := str(node.get_meta("branch_name")).split("_")
+	if parts.size() >= 4 and parts[0] == "Branch" and parts[2] == "Segment":
+		return {
+			"branch": int(parts[1]),
+			"segment": int(parts[3])
+		}
+	return {}
+	
+func _highlight_whole_branch(branch: Node3D) -> void:
+	for child in pivot_clone_root.get_node("ModelRot").get_children():
+		if child is MeshInstance3D:
+			# Show everything with its original material
+			child.visible = true
+			if child.has_meta("orig_material"):
+				child.material_override = child.get_meta("orig_material")
+	
+	# Then highlight the hovered branch + connected
+	var connected = _collect_connected(branch)
+	for seg in connected:
+		if seg is MeshInstance3D:
+			# Force outline highlight
+			seg.visible = true
+					
+func _clear_all_highlights():
+	if not is_instance_valid(pivot_clone_root):
+		return
+	for child in pivot_clone_root.get_node("ModelRot").get_children():
+		if child is MeshInstance3D and child.has_meta("outline_mat"):
+			var mat := child.get_meta("outline_mat") as ShaderMaterial
+			if mat:
+				mat.set_shader_parameter("enabled", 0.0)
+				
+func _collect_connected(start: Node3D) -> Array:
+	var stack: Array = [start]
+	var visited: Array = []
+	
+	while stack.size() > 0:
+		var current: Node3D = stack.pop_back()
+		if visited.has(current):
+			continue
+		visited.append(current)
+		
+		# Look through children for connected MeshInstances
+		for child in current.get_children():
+			if child is MeshInstance3D and not visited.has(child):
+				stack.append(child)
+		
+		# Also climb up to parent if it's part of the branch chain
+		var parent = current.get_parent()
+		if parent and parent is MeshInstance3D and not visited.has(parent):
+			stack.append(parent)
+	
+	return visited
+
 func _reset_view():
 	if not is_instance_valid(pivot_clone_root):
 		return
