@@ -73,14 +73,32 @@ func _configure_subviewport():
 	sv.render_target_clear_mode = SubViewport.CLEAR_MODE_ALWAYS
 	sv.transparent_bg = true
 
+	# Ensure there is a camera
+	if not sv.has_node("EditCam3D"):
+		var cam := Camera3D.new()
+		cam.name = "EditCam3D"
+		cam.current = true
+		sv.add_child(cam)
+
+
+
+	# Double resolution for sharper rendering
+	var screen_size := get_viewport().get_visible_rect().size
+	sv.size = screen_size * 2
+
+
+
 	var svc := $SubViewportContainer
 	svc.set_anchors_preset(Control.PRESET_FULL_RECT)
 	svc.stretch = true
 	svc.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 func _resize_subviewport():
-	var size: Vector2i = get_viewport().size
-	$SubViewportContainer/SubViewport.size = size
+	var sv := $SubViewportContainer/SubViewport
+	var screen_size := get_viewport().get_visible_rect().size
+	sv.size = screen_size * 2
+
+
 
 func _ensure_dimmer_order() -> void:
 	var svc := $SubViewportContainer
@@ -251,13 +269,14 @@ func _process(delta: float) -> void:
 		if Input.is_action_pressed("zoom_out"):  # E
 			pivot_distance = clamp(pivot_distance + delta * 2.0, MIN_DIST, MAX_DIST)
 
-	# ───────────────
-	# Debug update
-	# ───────────────
+	# Debug + highlight update
 	if debug_menu and debug_menu.visible:
 		var hovered := _get_hovered_branch()
+
+		_clear_all_highlights()
 		if hovered:
-			debug_menu.branch_label.text = "Hovering over branch: %s" % hovered.name
+			_set_highlight(hovered, true)
+			debug_menu.branch_label.text = "Hovering over: %s" % hovered.name
 		else:
 			debug_menu.branch_label.text = "Not over branch"
 
@@ -270,6 +289,7 @@ func _process(delta: float) -> void:
 
 
 
+
 # ─────────────────────────────
 # Hover detection
 # ─────────────────────────────
@@ -278,57 +298,60 @@ func _get_hovered_branch() -> MeshInstance3D:
 		return null
 
 	var cam: Camera3D = $SubViewportContainer/SubViewport/EditCam3D
+	var sv: SubViewport = $SubViewportContainer/SubViewport
+	var container: Control = $SubViewportContainer
 	if not cam or not in_edit_mode:
 		return null
 
-	# Ray from camera
-	var mouse_pos: Vector2 = _catcher.get_local_mouse_position()
+	# Mouse in the SubViewport's coordinate space
+	var mouse_pos: Vector2 = container.get_local_mouse_position()
+	# (optional) clamp to viewport bounds to avoid NaNs when outside
+	mouse_pos.x = clamp(mouse_pos.x, 0.0, float(sv.size.x - 1))
+	mouse_pos.y = clamp(mouse_pos.y, 0.0, float(sv.size.y - 1))
+
+	# Build ray from the SubViewport camera
 	var from: Vector3 = cam.project_ray_origin(mouse_pos)
 	var dir: Vector3 = cam.project_ray_normal(mouse_pos).normalized()
 
 	var closest: MeshInstance3D = null
 	var closest_dist := INF
 
-	# Loop through cloned branches
 	for child in pivot_clone_root.get_node("ModelRot").get_children():
 		if child is MeshInstance3D and child.has_meta("outline"):
 			var aabb := _aabb_transformed(child.get_aabb(), child.global_transform)
 
-			# Custom ray–AABB check
+			# Ray–AABB test (slab method)
 			var tmin := -INF
 			var tmax := INF
-
 			for i in 3:
-				var origin := from[i]
-				var direction := dir[i]
-				var minb := aabb.position[i]
-				var maxb := aabb.position[i] + aabb.size[i]
+				var o := from[i]
+				var d := dir[i]
+				var mn := aabb.position[i]
+				var mx := aabb.position[i] + aabb.size[i]
 
-				if abs(direction) < 1e-6:
-					# Ray parallel to slab
-					if origin < minb or origin > maxb:
+				if abs(d) < 1e-6:
+					if o < mn or o > mx:
 						tmin = INF
 						break
 				else:
-					var inv_dir := 1.0 / direction
-					var t1 := (minb - origin) * inv_dir
-					var t2 := (maxb - origin) * inv_dir
+					var invd := 1.0 / d
+					var t1 := (mn - o) * invd
+					var t2 := (mx - o) * invd
 					if t1 > t2:
-						var tmp = t1
-						t1 = t2
-						t2 = tmp
+						var tmp = t1; t1 = t2; t2 = tmp
 					tmin = max(tmin, t1)
 					tmax = min(tmax, t2)
 					if tmin > tmax:
 						tmin = INF
 						break
 
-			if tmin < INF and tmin > 0.0:
-				if tmin < closest_dist:
-					closest_dist = tmin
-					closest = child
+			if tmin < INF and tmin > 0.0 and tmin < closest_dist:
+				closest_dist = tmin
+				closest = child
 
 	return closest
+
+
 
 
 # ─────────────────────────────
@@ -383,19 +406,20 @@ func _build_center_preview(cam: Camera3D):
 		if child is MeshInstance3D and child.has_meta("outline"):
 			seg_index += 1
 			var orig := child as MeshInstance3D
+
+			# Clone of the real mesh
 			var clone := MeshInstance3D.new()
 			clone.mesh = orig.mesh
 			clone.transform = orig.transform
 			clone.layers = CLONE_LAYER_MASK
 			var mat := StandardMaterial3D.new()
-			mat.albedo_color = Color(0.45, 0.28, 0.15) # light brown
+			mat.albedo_color = Color(0.45, 0.28, 0.15, 1.0) # brown
 			clone.material_override = mat
 			clone.name = "Seg_%d" % seg_index
-			clone.set_meta("branch_name", orig.name)   # 🔹 store the original branch name
+			clone.set_meta("branch_name", orig.name)
 			model_rot.add_child(clone)
 
-
-			# collider
+			# Collider
 			var collider := StaticBody3D.new()
 			var shape := CollisionShape3D.new()
 			shape.shape = orig.mesh.create_trimesh_shape()
@@ -405,23 +429,28 @@ func _build_center_preview(cam: Camera3D):
 			collider.collision_layer = CLONE_LAYER_MASK
 			model_rot.add_child(collider)
 
-			# outline
+			# Outline mesh
 			var outline := MeshInstance3D.new()
 			outline.mesh = orig.mesh
 			outline.visible = false
-			outline.scale = Vector3(1.05, 1.05, 1.05)
+			outline.transform = orig.transform
+
+			# Make it THICK by scaling
+			outline.scale = Vector3(1.15, 1.15, 1.15)   # 15% bigger
+
 			var outline_mat := StandardMaterial3D.new()
-			outline_mat.albedo_color = Color(1, 1, 0)
+			outline_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			outline_mat.albedo_color = Color(1, 1, 0)    # bright yellow
 			outline_mat.emission_enabled = true
 			outline_mat.emission = Color(1, 1, 0)
-			outline_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+			outline_mat.cull_mode = BaseMaterial3D.CULL_FRONT   # 🔑 inverted normals
 			outline.material_override = outline_mat
-			outline.transform = orig.transform
+
 			outline.name = "Seg_%d_outline" % seg_index
 			model_rot.add_child(outline)
 			clone.set_meta("outline", outline)
 
-	# center
+	# Center and fit to camera
 	model_rot.rotate_object_local(Vector3.FORWARD, -PI * 0.5)
 	var center := _centroid_local(model_rot)
 	model_rot.translate_object_local(-center)
@@ -429,7 +458,6 @@ func _build_center_preview(cam: Camera3D):
 	var forward := -cam.global_transform.basis.z
 	if forward.length_squared() < 1e-6:
 		forward = Vector3.FORWARD
-	forward = forward.normalized()
 	var right := Vector3.UP.cross(forward).normalized()
 	pivot_clone_root.basis = Basis(right, Vector3.UP, -forward)
 
@@ -448,6 +476,8 @@ func _build_center_preview(cam: Camera3D):
 		+ (-cam.global_transform.basis.z) * pivot_distance \
 		+ up * (_preview_size.y * view_up_bias)
 	pivot_clone_root.transform = Transform3D(pivot_clone_root.basis, target_pos)
+
+
 
 # ─────────────────────────────
 # Geometry helpers
@@ -489,13 +519,22 @@ func _highlight_whole_branch(branch_index: int) -> void:
 			if not info.is_empty() and info["branch"] == branch_index:
 				child.get_meta("outline").visible = true
 
+func _set_highlight(branch: MeshInstance3D, state: bool) -> void:
+	if branch and branch.has_meta("outline"):
+		var outline: MeshInstance3D = branch.get_meta("outline")
+		if outline:
+			outline.visible = state
 
-func _clear_all_highlights() -> void:
+
+func _clear_all_highlights():
 	if not is_instance_valid(pivot_clone_root):
 		return
 	for child in pivot_clone_root.get_node("ModelRot").get_children():
 		if child is MeshInstance3D and child.has_meta("outline"):
-			child.get_meta("outline").visible = false
+			var outline: MeshInstance3D = child.get_meta("outline")
+			if outline:
+				outline.visible = false
+
 
 
 
