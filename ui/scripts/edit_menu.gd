@@ -250,6 +250,7 @@ func _process(delta: float) -> void:
 	if not in_edit_mode:
 		return
 
+	# Keep the preview stick in front of camera
 	if player_camera and is_instance_valid(pivot_clone_root):
 		var cam: Camera3D = $SubViewportContainer/SubViewport/EditCam3D
 		cam.global_transform = player_camera.global_transform
@@ -263,42 +264,47 @@ func _process(delta: float) -> void:
 		xf.origin = target_pos
 		pivot_clone_root.transform = xf
 
-		if Input.is_action_pressed("zoom_in"):
+		# Q/E zoom
+		if Input.is_action_pressed("zoom_in"):   # Q
 			pivot_distance = clamp(pivot_distance - delta * 2.0, MIN_DIST, MAX_DIST)
-		if Input.is_action_pressed("zoom_out"):
+		if Input.is_action_pressed("zoom_out"):  # E
 			pivot_distance = clamp(pivot_distance + delta * 2.0, MIN_DIST, MAX_DIST)
 
-	# Access shader
+	# ─────────────────────────────
+	# Outline control
+	# ─────────────────────────────
 	var mat := $outliner.material as ShaderMaterial
-	if not mat:
-		return
-
-	if debug_menu != null and debug_menu.visible:
-		# Debug ON → show outline on all
-		mat.set_shader_parameter("enabled", 1.0)
-		for child in pivot_clone_root.get_node("ModelRot").get_children():
-			if child is MeshInstance3D:
-				child.layers = CLONE_LAYER_MASK
-	else:
-		# Debug OFF → only hovered branch
-		var hovered := _get_hovered_branch()
-		if hovered:
+	if mat:
+		if debug_menu and debug_menu.visible:
+			# Debug open → always show full stick
 			mat.set_shader_parameter("enabled", 1.0)
-			# Set hovered visible to outline
 			for child in pivot_clone_root.get_node("ModelRot").get_children():
 				if child is MeshInstance3D:
-					child.layers = 0
-			hovered.layers = CLONE_LAYER_MASK
+					child.visible = true
 		else:
-			mat.set_shader_parameter("enabled", 0.0)
+			# Debug closed → hover-based highlighting
+			var hovered := _get_hovered_branch()
+			if hovered:
+				mat.set_shader_parameter("enabled", 1.0)
 
-	# Debug info
+				# Hide all segments first
+				for child in pivot_clone_root.get_node("ModelRot").get_children():
+					if child is MeshInstance3D:
+						child.visible = false
+
+				# Show hovered branch + connected ones
+				var info := _parse_branch_info(hovered)
+				if not info.is_empty():
+					_highlight_whole_branch(info["branch"])
+			else:
+				mat.set_shader_parameter("enabled", 0.0)
+
+	# ─────────────────────────────
+	# Debug info labels
+	# ─────────────────────────────
 	if debug_menu and debug_menu.visible:
 		var hovered := _get_hovered_branch()
-		if hovered:
-			debug_menu.branch_label.text = "Hovering over: %s" % hovered.name
-		else:
-			debug_menu.branch_label.text = "Not over branch"
+		debug_menu.branch_label.text = hovered.name if hovered else "Not over branch"
 
 		if is_instance_valid(pivot_clone_root):
 			var count := pivot_clone_root.get_node("ModelRot").get_child_count()
@@ -376,21 +382,15 @@ func _parse_branch_info(node: Node) -> Dictionary:
 			"segment": int(parts[3])
 		}
 	return {}
-	
-func _highlight_whole_branch(branch: Node3D) -> void:
+
+func _highlight_whole_branch(branch_index: int) -> void:
+	if not is_instance_valid(pivot_clone_root):
+		return
 	for child in pivot_clone_root.get_node("ModelRot").get_children():
-		if child is MeshInstance3D:
-			# Show everything with its original material
-			child.visible = true
-			if child.has_meta("orig_material"):
-				child.material_override = child.get_meta("orig_material")
-	
-	# Then highlight the hovered branch + connected
-	var connected = _collect_connected(branch)
-	for seg in connected:
-		if seg is MeshInstance3D:
-			# Force outline highlight
-			seg.visible = true
+		if child is MeshInstance3D and child.has_meta("branch_name"):
+			var info := _parse_branch_info(child)
+			if not info.is_empty() and info["branch"] == branch_index:
+				child.visible = true
 					
 func _clear_all_highlights():
 	if not is_instance_valid(pivot_clone_root):
