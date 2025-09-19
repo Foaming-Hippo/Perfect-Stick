@@ -20,8 +20,8 @@ extends Node3D
 @export var ray_count: int = 8
 
 # 🔹 Flick throw settings
-@export var flick_sensitivity: float = 0.05  # multiplier for flick velocity
-@export var flick_max_boost: float = 20.0    # clamp maximum flick force
+@export var flick_sensitivity: float = 0.05
+@export var flick_max_boost: float = 20.0
 
 @onready var hand: Node3D = get_node("../player/CollisionShape3D/Camera_Control/Camera3D/HandSocket")
 
@@ -34,6 +34,9 @@ var grabbed_offset: Vector3 = Vector3.ZERO
 # For flick detection
 var last_mouse_delta: Vector2 = Vector2.ZERO
 
+# 🔹 branch naming
+var _branch_counter: int = 0
+
 
 func _ready() -> void:
 	randomize()
@@ -41,40 +44,35 @@ func _ready() -> void:
 
 
 func _input(event: InputEvent) -> void:
-	var edit_menu = get_tree().current_scene.get_node("UI/EditMenu") # adjust path
+	var edit_menu = get_tree().current_scene.get_node("UI/EditMenu") # adjust path if needed
 
-	# handle toggling edit mode first
+	# toggle edit first
 	if event.is_action_pressed("edit_stick") and held_stick and edit_menu:
 		if edit_menu.in_edit_mode:
 			edit_menu.exit_edit_mode()
 		else:
 			edit_menu.enter_edit_mode(held_stick)
-		return  # stop here so it doesn’t trigger other actions
+		return
 
-	# block all other inputs if menu is open
+	# block gameplay while edit is open
 	if edit_menu and edit_menu.in_edit_mode:
 		return
 
-	# --- normal stick controls ---
+	# normal controls
 	if event.is_action_pressed("gen"):
 		generate_stick()
-
-	elif event.is_action_pressed("interact"):  # E
+	elif event.is_action_pressed("interact"):
 		if held_stick:
 			drop_stick()
 		else:
 			pickup_nearest_stick()
-
-	elif event.is_action_pressed("mouse_left"):  # left click hold
+	elif event.is_action_pressed("mouse_left"):
 		grab_stick()
 	elif event.is_action_released("mouse_left"):
 		release_grabbed_stick()
 
-	# Capture flick mouse movement
 	if event is InputEventMouseMotion:
 		last_mouse_delta = event.relative
-
-
 
 
 # ───────────────
@@ -86,7 +84,6 @@ var light_throw_sounds: Array[AudioStream] = [
 var medium_throw_sounds: Array[AudioStream] = [
 	preload("res://assets/sounds/again-fetty-wap-jbl-made-with-Voicemod.wav")
 ]
-
 var heavy_throw_sounds: Array[AudioStream] = [
 	preload("res://assets/sounds/kirby-falling-meme-scream-made-with-Voicemod.mp3"),
 	preload("res://assets/sounds/streamer-scream-meme-made-with-Voicemod.mp3"),
@@ -111,22 +108,17 @@ func play_throw_sound_if_hard(stick: RigidBody3D) -> void:
 		sound.stream = super_throw[randi() % super_throw.size()]
 		sound.volume_db = 50.0
 	elif speed > 20.0:
-		# Heavy throw
 		sound.stream = heavy_throw_sounds[randi() % heavy_throw_sounds.size()]
-		sound.volume_db = 35.0   # +6dB louder
+		sound.volume_db = 35.0
 	elif speed > 12.0:
-		# Medium throw
 		sound.stream = medium_throw_sounds[randi() % medium_throw_sounds.size()]
 		sound.volume_db = 6.0
 	elif speed > 6.0:
-		# Light throw
 		sound.stream = light_throw_sounds[randi() % light_throw_sounds.size()]
 		sound.volume_db = 2.0
 	else:
-		return  # too soft, no sound
-
+		return
 	sound.play()
-		
 
 
 # ───────────────
@@ -152,8 +144,7 @@ func _get_ray_offsets() -> Array:
 # ───────────────
 func pickup_nearest_stick() -> void:
 	var cam: Camera3D = get_viewport().get_camera_3d()
-	if cam == null: 
-		return
+	if cam == null: return
 
 	var screen_center: Vector2 = get_viewport().get_visible_rect().size / 2
 	var closest: RigidBody3D = null
@@ -174,8 +165,7 @@ func pickup_nearest_stick() -> void:
 					closest = body
 					closest_dist = dist
 
-	if closest == null: 
-		return
+	if closest == null: return
 
 	_clear_highlight()
 	held_stick = closest
@@ -189,10 +179,8 @@ func pickup_nearest_stick() -> void:
 		held_stick.get_parent().remove_child(held_stick)
 	hand.add_child(held_stick)
 
-	# 🔹 Align like a spear (base -> farthest branch forward)
 	var spear_dir := get_stick_direction(held_stick)
 	var rotation := Basis().looking_at(spear_dir, Vector3.UP)
-
 	var hold_offset := Transform3D(rotation, Vector3(0.3, -0.3, -0.7))
 	held_stick.transform = hold_offset
 
@@ -216,19 +204,14 @@ func get_stick_direction(stick: RigidBody3D) -> Vector3:
 	return (farthest_point - base_pos).normalized()
 
 
-
-
-
 func drop_stick() -> void:
 	if held_stick == null: return
-
 	var drop_transform: Transform3D = held_stick.global_transform
 	var world_parent: Node = get_tree().current_scene if get_parent() == null else get_parent()
 
 	hand.remove_child(held_stick)
 	world_parent.add_child(held_stick)
 	held_stick.global_transform = drop_transform
-
 	held_stick.freeze = false
 	held_stick.gravity_scale = 1.0
 
@@ -244,12 +227,9 @@ func drop_stick() -> void:
 # Physics Grab
 # ───────────────
 func grab_stick() -> void:
-	if grabbed_stick != null:
-		return
-
+	if grabbed_stick != null: return
 	var cam: Camera3D = get_viewport().get_camera_3d()
-	if cam == null:
-		return
+	if cam == null: return
 
 	var screen_center: Vector2 = get_viewport().get_visible_rect().size / 2
 	var closest: RigidBody3D = null
@@ -272,8 +252,7 @@ func grab_stick() -> void:
 					closest_hit = result
 					closest_dist = dist
 
-	if closest == null:
-		return
+	if closest == null: return
 
 	_clear_highlight()
 	grabbed_stick = closest
@@ -305,7 +284,6 @@ func release_grabbed_stick() -> void:
 	if player and player.has_method("get_velocity"):
 		grabbed_stick.linear_velocity += player.get_velocity()
 
-	# 🔹 Add flick throw force
 	var cam: Camera3D = get_viewport().get_camera_3d()
 	if cam:
 		var flick_force = -cam.global_basis.z * min(last_mouse_delta.length() * flick_sensitivity, flick_max_boost)
@@ -320,8 +298,7 @@ func release_grabbed_stick() -> void:
 # ───────────────
 func _process(_delta: float) -> void:
 	var cam: Camera3D = get_viewport().get_camera_3d()
-	if cam == null: 
-		return
+	if cam == null: return
 
 	var screen_center: Vector2 = get_viewport().get_visible_rect().size / 2
 	var closest: RigidBody3D = null
@@ -378,40 +355,35 @@ func generate_stick() -> void:
 	stick.can_sleep = false
 	stick.collision_layer = 1 << 3
 	stick.collision_mask  = 1 << 0
-	stick.contact_monitor = true          # 🔹 Enable collision reporting
-	stick.max_contacts_reported = 1       # 🔹 Only need first hit
+	stick.contact_monitor = true
+	stick.max_contacts_reported = 1
 	add_child(stick)
 
-	_make_stick_segment(Vector3.ZERO, Basis(), 1.0, base_thickness, stick)
+	_branch_counter = 0
+	_make_stick_segment(Vector3.ZERO, Basis(), 1.0, base_thickness, stick, 0)
 
 	stick.position = Vector3(randf_range(-2, 2), 2, randf_range(-2, 2))
-	stick.angular_velocity = Vector3(
-		randf_range(-3, 3),
-		randf_range(-3, 3),
-		randf_range(-3, 3)
-	)
-	
-	# 🔹 Add sound player to the stick
+	stick.angular_velocity = Vector3(randf_range(-3, 3), randf_range(-3, 3), randf_range(-3, 3))
+
 	var sound := AudioStreamPlayer3D.new()
 	sound.stream = preload("res://assets/sounds/kirby-falling-meme-scream-made-with-Voicemod.mp3")
 	sound.autoplay = false
-
-	# Distance fade
 	sound.unit_size = 1.0
 	sound.max_distance = 50.0
 	sound.attenuation_model = AudioStreamPlayer3D.ATTENUATION_INVERSE_DISTANCE
-
 	stick.add_child(sound)
 	stick.set_meta("throw_sound", sound)
-
-	# 🔹 Stop sound instantly when it collides with *anything*
-	stick.body_entered.connect(func(_body):
-		if sound.playing:
-			sound.stop()
-	)
+	stick.body_entered.connect(func(_body): if sound.playing: sound.stop())
 
 
-func _make_stick_segment(start_pos: Vector3, start_basis: Basis, scale: float, parent_thickness: float, parent_node: Node3D) -> void:
+func _make_stick_segment(
+	start_pos: Vector3,
+	start_basis: Basis,
+	scale: float,
+	parent_thickness: float,
+	parent_node: Node3D,
+	branch_id: int
+) -> void:
 	var segs: int = int(segment_count * scale)
 	if segs <= 0: return
 
@@ -440,6 +412,12 @@ func _make_stick_segment(start_pos: Vector3, start_basis: Basis, scale: float, p
 		mi.transform = Transform3D(seg_basis, pos + world_offset)
 		parent_node.add_child(mi)
 
+		# 🔹 Assign readable name & metadata
+		mi.name = "Branch_%d_Segment_%d" % [branch_id, i]
+		mi.set_meta("branch_id", branch_id)
+		mi.set_meta("seg_index", i)
+
+		# outline
 		var outline := MeshInstance3D.new()
 		outline.mesh = cyl
 		outline.visible = false
@@ -454,6 +432,7 @@ func _make_stick_segment(start_pos: Vector3, start_basis: Basis, scale: float, p
 		parent_node.add_child(outline)
 		mi.set_meta("outline", outline)
 
+		# collision
 		var capsule := CapsuleShape3D.new()
 		capsule.radius = thickness * 0.5
 		capsule.height = length
@@ -462,13 +441,17 @@ func _make_stick_segment(start_pos: Vector3, start_basis: Basis, scale: float, p
 		coll.transform = mi.transform
 		parent_node.add_child(coll)
 
+		# advance along current segment axis
 		pos += (seg_basis * Vector3.UP) * length
 
+		# random bend
 		var bend := Basis()
 		bend = bend.rotated(Vector3.RIGHT, randf_range(-angle_variance, angle_variance))
 		bend = bend.rotated(Vector3.FORWARD, randf_range(-angle_variance, angle_variance))
 		seg_basis = seg_basis * bend
 
+		# possible branch
 		if randf() < branch_chance and scale > 0.3:
+			_branch_counter += 1
 			var branch_basis := seg_basis.rotated(Vector3.UP, randf_range(-1.0, 1.0))
-			_make_stick_segment(pos, branch_basis, scale * branch_scale, thickness, parent_node)
+			_make_stick_segment(pos, branch_basis, scale * branch_scale, thickness, parent_node, _branch_counter)

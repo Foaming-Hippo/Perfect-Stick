@@ -1,11 +1,11 @@
 extends CanvasLayer
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Transparent overlay “inspect” view (free orbit).
-# - Pivot is the stick's middle (AABB center).
-# - Left-drag = yaw + pitch orbit.
+# Transparent overlay “inspect” view.
+# - Pivot = chosen branch (default: center).
+# - Left-drag = rotate (yaw locked to world UP).
 # - Wheel = zoom, Right-click = reset.
-# - Real stick hidden locally via layer; others still see it.
+# - Highlight system: outline meshes toggle on/off.
 # ─────────────────────────────────────────────────────────────────────────────
 
 var stick: RigidBody3D = null
@@ -14,7 +14,6 @@ var pivot_clone_root: Node3D = null
 var in_edit_mode := false
 
 var player_camera: Camera3D = null
-var _clone_pairs: Array = []
 var _catcher: ColorRect = null
 
 const LOCAL_HIDE_BIT := 18
@@ -27,9 +26,7 @@ var _saved_real_layers: Array = []
 
 var pivot_distance: float = 2.0
 var _fit_distance_base: float = 2.0
-
-# ↑ Lift the preview in screen space (+ raises, - lowers), scaled by stick height
-@export var view_up_bias: float = 0.45
+@export var view_up_bias: float = 0.0
 var _preview_size: Vector3 = Vector3.ONE
 
 const ORBIT_SENS := 0.01
@@ -37,13 +34,11 @@ const ZOOM_STEP := 1.1
 const MIN_DIST := 0.15
 const MAX_DIST := 50.0
 var _orbit_drag := false
+var _last_mouse_pos: Vector2
 
-# orbit state
-var orbit_yaw := 0.0
-var orbit_pitch := 0.0
-const PITCH_LIMIT := deg_to_rad(89.0)
-var _pivot_base_basis: Basis = Basis()
-
+# ─────────────────────────────
+# Ready
+# ─────────────────────────────
 func _ready():
 	visible = false
 	process_priority = 1000000
@@ -59,6 +54,9 @@ func _ready():
 	if player:
 		player_camera = player.get_node("CollisionShape3D/Camera_Control/Camera3D") as Camera3D
 
+# ─────────────────────────────
+# SubViewport helpers
+# ─────────────────────────────
 func _configure_subviewport():
 	var sv := $SubViewportContainer/SubViewport
 	sv.disable_3d = false
@@ -84,7 +82,6 @@ func _ensure_dimmer_order() -> void:
 		cr.name = "ColorRect"
 		cr.set_anchors_preset(Control.PRESET_FULL_RECT)
 		cr.z_index = 0
-
 	if has_node("ColorRect"):
 		$ColorRect.z_index = 0
 	svc.z_index = 100
@@ -149,15 +146,9 @@ func enter_edit_mode(target: RigidBody3D):
 func exit_edit_mode():
 	if not in_edit_mode:
 		return
-
 	if is_instance_valid(pivot_clone_root):
 		pivot_clone_root.queue_free()
 	pivot_clone_root = null
-
-	if is_instance_valid(stick_clone_root):
-		stick_clone_root.queue_free()
-		stick_clone_root = null
-	_clone_pairs.clear()
 
 	_set_real_meshes_local_hidden(false)
 	if player_camera:
@@ -185,12 +176,11 @@ func exit_edit_mode():
 		player.call_deferred("set_ui_lock", false)
 
 # ─────────────────────────────
-# Input (free orbit)
+# Input
 # ─────────────────────────────
 func _on_catcher_gui_input(event: InputEvent) -> void:
 	if not in_edit_mode:
 		return
-
 	if event.is_action_pressed("ui_cancel"):
 		exit_edit_mode()
 		get_viewport().set_input_as_handled()
@@ -201,6 +191,7 @@ func _on_catcher_gui_input(event: InputEvent) -> void:
 		match mb.button_index:
 			MOUSE_BUTTON_LEFT:
 				_orbit_drag = mb.pressed
+				_last_mouse_pos = mb.position
 				Input.set_default_cursor_shape(Input.CURSOR_DRAG if _orbit_drag else Input.CURSOR_ARROW)
 				get_viewport().set_input_as_handled()
 			MOUSE_BUTTON_RIGHT:
@@ -218,40 +209,34 @@ func _on_catcher_gui_input(event: InputEvent) -> void:
 
 	if event is InputEventMouseMotion and _orbit_drag and is_instance_valid(pivot_clone_root):
 		var mm := event as InputEventMouseMotion
-
-		# update orbit angles
-		orbit_yaw   += mm.relative.x * ORBIT_SENS
-		orbit_pitch += mm.relative.y * ORBIT_SENS
-		orbit_pitch = clamp(orbit_pitch, -PITCH_LIMIT, PITCH_LIMIT)
-
-		# rebuild orientation from base
-		var basis := _pivot_base_basis
-		basis = Basis(Vector3.UP, orbit_yaw) * basis           # yaw around world UP
-		basis = Basis(basis.x.normalized(), orbit_pitch) * basis  # pitch around pivot’s local right
-		var xf := pivot_clone_root.global_transform
-		xf.basis = basis.orthonormalized()
-		pivot_clone_root.global_transform = xf
-
+		var yaw := mm.relative.x * ORBIT_SENS
+		var pitch := mm.relative.y * ORBIT_SENS
+		var b := pivot_clone_root.transform.basis
+		# yaw around world up
+		b = Basis(Vector3.UP, yaw) * b
+		# pitch local X
+		b = Basis(b.x, pitch) * b
+		pivot_clone_root.transform.basis = b.orthonormalized()
 		get_viewport().set_input_as_handled()
 
-
+# ─────────────────────────────
+# Process
+# ─────────────────────────────
 func _process(_delta: float) -> void:
 	if not in_edit_mode:
 		return
-
-	if player_camera:
+	if player_camera and is_instance_valid(pivot_clone_root):
 		var cam: Camera3D = $SubViewportContainer/SubViewport/EditCam3D
 		cam.global_transform = player_camera.global_transform
 		cam.fov = player_camera.fov
-		if is_instance_valid(pivot_clone_root):
-			var forward := -cam.global_transform.basis.z
-			var up := cam.global_transform.basis.y
-			var target_pos := cam.global_transform.origin \
-				+ forward * pivot_distance \
-				+ up * (_preview_size.y * view_up_bias)
-			var xf := pivot_clone_root.global_transform
-			xf.origin = target_pos
-			pivot_clone_root.global_transform = xf
+		var forward := -cam.global_transform.basis.z
+		var up := cam.global_transform.basis.y
+		var target_pos := cam.global_transform.origin \
+			+ forward * pivot_distance \
+			+ up * (_preview_size.y * view_up_bias)
+		var xf := pivot_clone_root.transform
+		xf.origin = target_pos
+		pivot_clone_root.transform = xf
 
 # ─────────────────────────────
 # Helpers
@@ -260,24 +245,17 @@ func _reset_view():
 	if not is_instance_valid(pivot_clone_root):
 		return
 	var cam: Camera3D = $SubViewportContainer/SubViewport/EditCam3D
-
-	orbit_yaw = 0.0
-	orbit_pitch = 0.0
-	_pivot_base_basis = Basis()
-
 	var forward := -cam.global_transform.basis.z
 	if forward.length_squared() < 1e-6:
 		forward = Vector3.FORWARD
 	forward = forward.normalized()
 	var right := Vector3.UP.cross(forward).normalized()
 	var flat := Basis(right, Vector3.UP, -forward)
-
 	var up := cam.global_transform.basis.y
 	var target_pos := cam.global_transform.origin \
 		+ (-cam.global_transform.basis.z) * pivot_distance \
 		+ up * (_preview_size.y * view_up_bias)
-	var xf := Transform3D(flat, target_pos)
-	pivot_clone_root.global_transform = xf
+	pivot_clone_root.transform = Transform3D(flat, target_pos)
 	pivot_distance = clamp(_fit_distance_base, MIN_DIST, MAX_DIST)
 	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 
@@ -307,30 +285,50 @@ func _build_center_preview(cam: Camera3D):
 	model_rot.name = "ModelRot"
 	pivot_clone_root.add_child(model_rot)
 
+	# Clone meshes + outlines
+	var seg_index := 0
 	for child in stick.get_children():
 		if child is MeshInstance3D and child.has_meta("outline"):
+			seg_index += 1
 			var orig := child as MeshInstance3D
 			var clone := MeshInstance3D.new()
 			clone.mesh = orig.mesh
 			clone.material_override = orig.material_override
 			clone.transform = orig.transform
 			clone.layers = CLONE_LAYER_MASK
+			clone.name = "Seg_%d" % seg_index
 			model_rot.add_child(clone)
 
-	var center0 := _centroid_local(model_rot)
-	model_rot.translate_object_local(-center0)
-	model_rot.rotate_object_local(Vector3.FORWARD, -PI * 0.5)
-	var center1 := _centroid_local(model_rot)
-	model_rot.translate_object_local(-center1)
+			# yellow outline
+			var outline := MeshInstance3D.new()
+			outline.mesh = orig.mesh
+			outline.visible = false
+			outline.scale = Vector3(1.05, 1.05, 1.05)
+			var outline_mat := StandardMaterial3D.new()
+			outline_mat.albedo_color = Color(1, 1, 0)
+			outline_mat.emission_enabled = true
+			outline_mat.emission = Color(1, 1, 0)
+			outline_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+			outline.material_override = outline_mat
+			outline.transform = orig.transform
+			outline.name = "Seg_%d_outline" % seg_index
+			model_rot.add_child(outline)
+			clone.set_meta("outline", outline)
 
+	# Horizontal rotate + recenter
+	model_rot.rotate_object_local(Vector3.FORWARD, -PI * 0.5)
+	var center := _centroid_local(model_rot)
+	model_rot.translate_object_local(-center)
+
+	# Orient to camera
 	var forward := -cam.global_transform.basis.z
-	forward.y = 0.0
 	if forward.length_squared() < 1e-6:
 		forward = Vector3.FORWARD
 	forward = forward.normalized()
 	var right := Vector3.UP.cross(forward).normalized()
 	pivot_clone_root.basis = Basis(right, Vector3.UP, -forward)
 
+	# Distance
 	var merged := _merged_local_aabb(model_rot)
 	if merged.size == Vector3.ZERO:
 		merged.size = Vector3.ONE
@@ -341,17 +339,31 @@ func _build_center_preview(cam: Camera3D):
 	_fit_distance_base = fit_dist * 1.2
 	pivot_distance = clamp(_fit_distance_base, MIN_DIST, MAX_DIST)
 
+	# Place in front of camera
 	var up := cam.global_transform.basis.y
 	var target_pos := cam.global_transform.origin \
 		+ (-cam.global_transform.basis.z) * pivot_distance \
 		+ up * (_preview_size.y * view_up_bias)
-	pivot_clone_root.global_transform = Transform3D(pivot_clone_root.basis, target_pos)
+	pivot_clone_root.transform = Transform3D(pivot_clone_root.basis, target_pos)
 
-	# reset orbit state
-	_pivot_base_basis = pivot_clone_root.basis
-	orbit_yaw = 0.0
-	orbit_pitch = 0.0
+# ─────────────────────────────
+# Highlight system
+# ─────────────────────────────
+func _set_highlight(seg: MeshInstance3D) -> void:
+	if seg.has_meta("outline"):
+		var outline: MeshInstance3D = seg.get_meta("outline")
+		if outline:
+			outline.visible = true
 
+func _clear_highlight(seg: MeshInstance3D) -> void:
+	if seg.has_meta("outline"):
+		var outline: MeshInstance3D = seg.get_meta("outline")
+		if outline:
+			outline.visible = false
+
+# ─────────────────────────────
+# Geometry helpers
+# ─────────────────────────────
 func _centroid_local(root: Node3D) -> Vector3:
 	var total_vol: float = 0.0
 	var acc: Vector3 = Vector3.ZERO
