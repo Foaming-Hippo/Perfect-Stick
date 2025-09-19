@@ -480,8 +480,8 @@ func _build_center_preview(cam: Camera3D):
 			clone.layers = CLONE_LAYER_MASK
 			var mat := StandardMaterial3D.new()
 			mat.albedo_color = Color(0.45, 0.28, 0.15, 1.0) # brown
-			clone.material_override = mat
-			clone.name = "Seg_%d" % seg_index
+			clone.matterial_override = mat
+			clone.name = orig.name
 			clone.set_meta("branch_name", orig.name)
 			model_rot.add_child(clone)
 
