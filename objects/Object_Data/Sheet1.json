@@ -1,0 +1,7 @@
+[
+	{"ID":"S001","Name":"Sword","Attack type":"melee","category":"physical","min # branches":"1"},
+	{"ID":"S002","Name":"Staff","Attack type":"ranged","category":"magic","min # branches":"1"},
+	{"ID":"S003","Name":"Gun","Attack type":"ranged","category":"physical","min # branches":"2"},
+	{"ID":"S004","Name":"Sling Shot","Attack type":"ranged","category":"physical","min # branches":"3"},
+	{"ID":"S005","Name":"nun chucks","Attack type":"melee","category":"physical","min # branches":"2"},
+	{"ID":"S006","Name":"bow","Attack type":"ranged","category":"physical","min # branches":"1"}]

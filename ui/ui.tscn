@@ -1,0 +1,77 @@
+[gd_scene load_steps=8 format=3 uid="uid://bgfjcc2hkle34"]
+
+[ext_resource type="Theme" uid="uid://2l4uv4cw4gub" path="res://ui/themes/debug.tres" id="1_ks8t7"]
+[ext_resource type="Script" uid="uid://bxjqem00efvn3" path="res://ui/scripts/debug.gd" id="2_wl5ax"]
+[ext_resource type="Script" uid="uid://ignhvdh1lktb" path="res://ui/scripts/edit_menu.gd" id="4_tf0e0"]
+[ext_resource type="Script" uid="uid://dbogqo3e8fybi" path="res://ui/scripts/crosshair.gd" id="4_vkava"]
+[ext_resource type="Shader" uid="uid://sfotboajqfmx" path="res://ui/outline_shader.gdshader" id="5_tf0e0"]
+
+[sub_resource type="Environment" id="Environment_vkava"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_tf0e0"]
+shader = ExtResource("5_tf0e0")
+shader_parameter/screen_size = Vector2(0, 0)
+shader_parameter/thickness = 3.0
+shader_parameter/outline_color = Color(1, 1, 0, 1)
+shader_parameter/enabled = 0.0
+
+[node name="UI" type="CanvasLayer"]
+
+[node name="Debug" type="PanelContainer" parent="."]
+custom_minimum_size = Vector2(200, 0)
+offset_left = 10.0
+offset_top = 10.0
+offset_right = 210.0
+offset_bottom = 50.0
+theme = ExtResource("1_ks8t7")
+script = ExtResource("2_wl5ax")
+
+[node name="MarginContainer" type="MarginContainer" parent="Debug"]
+layout_mode = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="Debug/MarginContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Crosshair" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 1
+script = ExtResource("4_vkava")
+color = Color(1, 1, 1, 0.498039)
+
+[node name="EditMenu" type="CanvasLayer" parent="."]
+script = ExtResource("4_tf0e0")
+
+[node name="SubViewportContainer" type="SubViewportContainer" parent="EditMenu"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+stretch = true
+
+[node name="SubViewport" type="SubViewport" parent="EditMenu/SubViewportContainer"]
+transparent_bg = true
+handle_input_locally = false
+size = Vector2i(1152, 648)
+render_target_update_mode = 4
+
+[node name="EditCam3D" type="Camera3D" parent="EditMenu/SubViewportContainer/SubViewport"]
+visible = false
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="EditMenu/SubViewportContainer/SubViewport"]
+environment = SubResource("Environment_vkava")
+
+[node name="outliner" type="ColorRect" parent="EditMenu"]
+material = SubResource("ShaderMaterial_tf0e0")
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2

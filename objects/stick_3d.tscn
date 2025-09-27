@@ -1,0 +1,14 @@
+[gd_scene load_steps=3 format=3 uid="uid://dmv0nfwou2uwu"]
+
+[ext_resource type="Script" uid="uid://dvo1lfdhisdvp" path="res://objects/object scripts/stick_3d.gd" id="1_lt403"]
+[ext_resource type="AudioStream" uid="uid://bo8u057np4l61" path="res://assets/sounds/kirby-falling-meme-scream-made-with-Voicemod.mp3" id="2_iqr6h"]
+
+[node name="Node3D" type="Node3D"]
+script = ExtResource("1_lt403")
+branch_scale = 0.3
+
+[node name="RigidBody3D" type="RigidBody3D" parent="."]
+
+[node name="AudioStreamPlayer3D" type="AudioStreamPlayer3D" parent="RigidBody3D"]
+stream = ExtResource("2_iqr6h")
+doppler_tracking = 2

@@ -1,0 +1,62 @@
+[gd_scene load_steps=12 format=3 uid="uid://ddv0uay3yees8"]
+
+[ext_resource type="Texture2D" uid="uid://cbmo0und63y3r" path="res://assets/walltexture.jpgf8e1ee5c-aa56-40f9-986a-a583fbad830bLarge.jpg" id="1_e3ut3"]
+[ext_resource type="PackedScene" uid="uid://dngn2hauowag6" path="res://enviroment/world_environment.tscn" id="2_e3ut3"]
+[ext_resource type="PackedScene" uid="uid://dqur47ysrds8v" path="res://controls/player.tscn" id="5_0w1f6"]
+[ext_resource type="PackedScene" uid="uid://bgfjcc2hkle34" path="res://ui/ui.tscn" id="5_e2s3l"]
+[ext_resource type="PackedScene" uid="uid://dmv0nfwou2uwu" path="res://objects/stick_3d.tscn" id="5_wholn"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_le8cr"]
+albedo_texture = ExtResource("1_e3ut3")
+uv1_scale = Vector3(50, 50, 50)
+
+[sub_resource type="BoxMesh" id="BoxMesh_ig7tw"]
+material = SubResource("StandardMaterial3D_le8cr")
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_0xm2m"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_e3ut3"]
+albedo_color = Color(0.970595, 0.970595, 3.85046e-06, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_e3ut3"]
+material = SubResource("StandardMaterial3D_e3ut3")
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_le8cr"]
+
+[node name="Main" type="Node3D"]
+
+[node name="player" parent="." instance=ExtResource("5_0w1f6")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+
+[node name="floor_1" type="MeshInstance3D" parent="."]
+transform = Transform3D(50, 0, 0, 0, 1, 0, 0, 0, 50, 0, 0, 0)
+mesh = SubResource("BoxMesh_ig7tw")
+
+[node name="StaticBody3D" type="StaticBody3D" parent="floor_1"]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="floor_1/StaticBody3D"]
+shape = SubResource("BoxShape3D_0xm2m")
+
+[node name="WorldEnvironment" parent="." instance=ExtResource("2_e3ut3")]
+
+[node name="high_box" type="MeshInstance3D" parent="."]
+transform = Transform3D(10, 0, 0, 0, 0.5, 0, 0, 0, 5, 13.055, 1.5, 20.008)
+mesh = SubResource("BoxMesh_e3ut3")
+
+[node name="StaticBody3D" type="StaticBody3D" parent="high_box"]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="high_box/StaticBody3D"]
+shape = SubResource("BoxShape3D_le8cr")
+
+[node name="low_box" type="MeshInstance3D" parent="."]
+transform = Transform3D(10, 0, 0, 0, 0.5, 0, 0, 0, 5, -7.741, 1.25, 20.029)
+mesh = SubResource("BoxMesh_e3ut3")
+
+[node name="StaticBody3D" type="StaticBody3D" parent="low_box"]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="low_box/StaticBody3D"]
+shape = SubResource("BoxShape3D_le8cr")
+
+[node name="UI" parent="." instance=ExtResource("5_e2s3l")]
+
+[node name="Stick3D" parent="." instance=ExtResource("5_wholn")]

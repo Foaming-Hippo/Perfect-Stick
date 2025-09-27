@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3 uid="uid://ckmcxix7xyk71"]
+
+[ext_resource type="Script" uid="uid://ctudy6aye7xhf" path="res://objects/object scripts/stick_drawer.gd" id="1_hq1mt"]
+
+[node name="Node" type="Node2D"]
+
+[node name="Stick_Drawer" type="Node2D" parent="."]
+script = ExtResource("1_hq1mt")

@@ -1,0 +1,23 @@
+[gd_scene load_steps=4 format=3 uid="uid://dngn2hauowag6"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_te0mf"]
+
+[sub_resource type="Sky" id="Sky_x16oa"]
+sky_material = SubResource("ProceduralSkyMaterial_te0mf")
+
+[sub_resource type="Environment" id="Environment_wjtrd"]
+background_mode = 2
+sky = SubResource("Sky_x16oa")
+glow_levels/2 = 1.0
+glow_levels/3 = 0.0
+glow_levels/5 = 0.0
+glow_intensity = 8.0
+glow_strength = 2.0
+glow_blend_mode = 1
+
+[node name="WorldEnvironment" type="WorldEnvironment"]
+environment = SubResource("Environment_wjtrd")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.999982, 0.00602323, -0.000703089, -0.00514361, 0.903879, 0.427757, 0.00321199, -0.427745, 0.903894, 0, 0, 0)
+shadow_enabled = true

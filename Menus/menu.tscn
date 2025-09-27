@@ -1,0 +1,7 @@
+[gd_scene format=3 uid="uid://c34fu17xlvo7r"]
+
+[node name="Menu" type="Node2D"]
+
+[node name="Container" type="Container" parent="."]
+offset_right = 1150.0
+offset_bottom = 650.0
