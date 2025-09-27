@@ -1,0 +1,135 @@
+[remap]
+
+importer="scene"
+importer_version=1
+type="PackedScene"
+uid="uid://tp1xscmdxspp"
+path="res://.godot/imported/tree.glb-410d804336ce05fa65358fe9f133e723.scn"
+
+[deps]
+
+source_file="res://assets/trees/tree.glb"
+dest_files=["res://.godot/imported/tree.glb-410d804336ce05fa65358fe9f133e723.scn"]
+
+[params]
+
+nodes/root_type=""
+nodes/root_name=""
+nodes/root_script=null
+nodes/apply_root_scale=true
+nodes/root_scale=1.0
+nodes/import_as_skeleton_bones=false
+nodes/use_name_suffixes=true
+nodes/use_node_type_suffixes=true
+meshes/ensure_tangents=true
+meshes/generate_lods=true
+meshes/create_shadow_meshes=true
+meshes/light_baking=1
+meshes/lightmap_texel_size=0.2
+meshes/force_disable_compression=false
+skins/use_named_skins=true
+animation/import=true
+animation/fps=30
+animation/trimming=false
+animation/remove_immutable_tracks=true
+animation/import_rest_as_RESET=false
+import_script/path=""
+materials/extract=0
+materials/extract_format=0
+materials/extract_path=""
+_subresources={
+"meshes": {
+"tree_Cylinder": {
+"generate/lightmap_uv": 0,
+"generate/lods": 0,
+"generate/shadow_meshes": 0,
+"lods/normal_merge_angle": 20.0,
+"save_to_file/enabled": true,
+"save_to_file/fallback_path": "res://assets/trees/tree_000.res",
+"save_to_file/path": "uid://leabkw0chj6g"
+},
+"tree_Cylinder_011": {
+"generate/lightmap_uv": 0,
+"generate/lods": 0,
+"generate/shadow_meshes": 0,
+"lods/normal_merge_angle": 20.0,
+"save_to_file/enabled": true,
+"save_to_file/fallback_path": "res://assets/trees/tree_001.res",
+"save_to_file/path": "uid://p5vixbb68bt2"
+},
+"tree_Cylinder_012": {
+"generate/lightmap_uv": 0,
+"generate/lods": 0,
+"generate/shadow_meshes": 0,
+"lods/normal_merge_angle": 20.0,
+"save_to_file/enabled": true,
+"save_to_file/fallback_path": "res://assets/trees/tree_002.res",
+"save_to_file/path": "uid://bdgtyc6goufil"
+},
+"tree_Cylinder_013": {
+"generate/lightmap_uv": 0,
+"generate/lods": 0,
+"generate/shadow_meshes": 0,
+"lods/normal_merge_angle": 20.0,
+"save_to_file/enabled": true,
+"save_to_file/fallback_path": "res://assets/trees/tree_003.res",
+"save_to_file/path": "uid://ifky84jnwnlr"
+},
+"tree_Cylinder_014": {
+"generate/lightmap_uv": 0,
+"generate/lods": 0,
+"generate/shadow_meshes": 0,
+"lods/normal_merge_angle": 20.0,
+"save_to_file/enabled": true,
+"save_to_file/fallback_path": "res://assets/trees/tree_004.res",
+"save_to_file/path": "uid://chwtau6kvshor"
+},
+"tree_Cylinder_015": {
+"generate/lightmap_uv": 0,
+"generate/lods": 0,
+"generate/shadow_meshes": 0,
+"lods/normal_merge_angle": 20.0,
+"save_to_file/enabled": true,
+"save_to_file/fallback_path": "res://assets/trees/tree_005.res",
+"save_to_file/path": "uid://cq1ew0q0r1pm7"
+},
+"tree_Cylinder_016": {
+"generate/lightmap_uv": 0,
+"generate/lods": 0,
+"generate/shadow_meshes": 0,
+"lods/normal_merge_angle": 20.0,
+"save_to_file/enabled": true,
+"save_to_file/fallback_path": "res://assets/trees/tree_006.res",
+"save_to_file/path": "uid://cf8p5h58tx4lv"
+},
+"tree_Cylinder_017": {
+"generate/lightmap_uv": 0,
+"generate/lods": 0,
+"generate/shadow_meshes": 0,
+"lods/normal_merge_angle": 20.0,
+"save_to_file/enabled": true,
+"save_to_file/fallback_path": "res://assets/trees/tree_007.res",
+"save_to_file/path": "uid://c0skuhcuwp0x3"
+},
+"tree_Cylinder_018": {
+"generate/lightmap_uv": 0,
+"generate/lods": 0,
+"generate/shadow_meshes": 0,
+"lods/normal_merge_angle": 20.0,
+"save_to_file/enabled": true,
+"save_to_file/fallback_path": "res://assets/trees/tree_008.res",
+"save_to_file/path": "uid://ctr2hciwxf452"
+},
+"tree_Cylinder_019": {
+"generate/lightmap_uv": 0,
+"generate/lods": 0,
+"generate/shadow_meshes": 0,
+"lods/normal_merge_angle": 20.0,
+"save_to_file/enabled": true,
+"save_to_file/fallback_path": "res://assets/trees/tree_009.res",
+"save_to_file/path": "uid://bwjfro3x6amjj"
+}
+}
+}
+gltf/naming_version=2
+gltf/embedded_image_handling=1
